@@ -19,7 +19,6 @@
 #
 # You should have received a copy of the GNU General Public License along with
 # this program; if not, see <https://www.gnu.org/licenses/>.
-
 """The :py:mod:`~.cactus_grid` module provides functions to load grid function
 in Cactus formats.
 
@@ -35,13 +34,24 @@ There are multiple classes defined in this module:
   files associated to that grid function. Both the classes are derived from the
   same abstract base class :py:class`~.OneGridFunctionBase`, which implements
   the shared methods.
-
 These are hierarchical classes, one containing the others, so one typically ends
 up with a series of brackets to access the actual data. For example, if ``sim``
 is a :py:class:`~.SimDir`, ``sim.gf.xy['rho_b'][0]`` is ``rho_b`` at iteration 0
 on the equatorial plane represented as :py:class:`~.HierarchicalGridData`.
 
 """
+
+'''
+PSUEDOCODE
+
+GridFunctionsDir: Loops through all dimensions. Passes (list of all files) and (each dimension) as the paremeters to AllGridFunctions
+AllGridFunctions: 
+Current: Parses file name for dimension and variables then passes these OneGridFunctions()
+New: Parse files for variables only (openpmd dimension always xyz) and send timeLapse var to OneGridFunctions() to read data
+OneGridFunctions:
+Uses variable(s) parameter and parses the file for the variable to read data 
+'''
+
 
 import os
 import re
@@ -58,6 +68,9 @@ import numpy as np
 from kuibit import grid_data, simdir
 from kuibit.attr_dict import pythonize_name_dict
 from kuibit.cactus_ascii_utils import scan_header, total_filesize
+
+# adding open_api import to read bp files
+import openpmd_api as io
 
 
 class BaseOneGridFunction(ABC):
@@ -90,7 +103,7 @@ class BaseOneGridFunction(ABC):
     :type var_name: str
 
     """
-
+#
     def __init__(self, allfiles, var_name):
         """Constructor.
 
@@ -1282,6 +1295,8 @@ class AllGridFunctions:
     # specific pattern corresponding to the dimension (which are the keys on
     # the following dictionary). In general, the file name will be:
     # variable-name.ext.h5, eg rho.xy.h5.
+
+    # Organizes data by dimensions and variables
     filename_extensions = {
         (0,): ".x",
         (1,): ".y",
@@ -1359,11 +1374,16 @@ class AllGridFunctions:
             self.filename_extensions[self.dimension],
             r"asc(\.(gz|bz2))?",
         )
+        # Define pattern expression for bp file names
+        openpmd_pattern = r"^(\w+).it(\d+).bp$"
 
         # Variable files is a dictionary, the keys are the variables, the
         # values the set of files associated to that variable
         self._vars_ascii_files = {}
         self._vars_h5_files = {}
+
+        # D&I variable file dictionary for bp files
+        self._vars_openpmd_files = {}
 
         # _vars contains the actual data. It is used to cache results. _vars is
         # a dictionary with keys the variables and values OneGridFunction (H5 or
@@ -1372,6 +1392,8 @@ class AllGridFunctions:
 
         rx_h5 = re.compile(h5_pattern)
         rx_ascii = re.compile(ascii_pattern)
+        # compiling the bp file regular expression matching pattern
+        rx_openpmd = re.compile(openpmd_pattern)
 
         # Here we scan all the files and find those with a name that match
         # one of our regular expressions.
@@ -1380,6 +1402,9 @@ class AllGridFunctions:
             filename = os.path.split(f)[1]
             matched_h5 = rx_h5.match(filename)
             matched_ascii = rx_ascii.match(filename)
+            # applying the bp file regular expression pattern to the filename
+            matched_openpmd = rx_openpmd.match(filename)
+
             # If matched_pattern is not None, this is a Carpet h5 file
             if matched_h5 is not None:
                 # First, we understand if the file was output with
@@ -1478,6 +1503,28 @@ class AllGridFunctions:
                             var_list.add(f)
                     except RuntimeError:
                         pass
+            elif matched_openpmd is not None:
+                if self.dimension == (0, 1, 2):
+                    series = io.Series(f, io.Access.read_only)
+                    iterations = series.iterations
+                    for iter_item in iterations.items():
+                        iter_no = iter_item[0]
+                        print("Iter # = {}".format(iter_no))
+                        iter_obj = iter_item[1]
+                        print("Iter dt = {}, time = {}".format(iter_obj.dt, iter_obj.time))
+
+                        all_mesh = iter_obj.meshes
+                        for mesh in all_mesh.items():
+                            mesh_name = mesh[0]
+                            mesh_obj = mesh[1]
+                            print("Mesh '{0}".format(mesh_name))
+                            if mesh_name.startswith("admbase_lapse_"):
+                                for mesh_var in mesh_obj.items():
+                                    variable_name = mesh_var[0]
+                                    var_list = self._vars_openpmd_files.setdefault(
+                                        variable_name, set()
+                                    )
+                                    var_list.add(f)
 
         # What pythonize_name_dict does is to make the various variables
         # accessible as attributes, e.g. self.fields.rho
@@ -1507,6 +1554,10 @@ class AllGridFunctions:
                     self._vars_ascii_files[var_name],
                     var_name,
                     num_ghost=self.num_ghost,
+                )
+            elif var_name in self._vars_bp_files:
+                self._vars[var_name] = OneGridFunctionOpenPMD(
+                    self._vars_bp_files[var_name], var_name, self.dimension
                 )
 
         return self._vars[var_name]
@@ -1552,7 +1603,7 @@ class AllGridFunctions:
         """Return the list of all the available variables."""
         # We merge the dictionaries and return the keys.
         # This automatically takes care of making sure that they keys are unique.
-        return {**self._vars_h5_files, **self._vars_ascii_files}.keys()
+        return {**self._vars_h5_files, **self._vars_ascii_files, **self.vars_openpmd_files}.keys()
 
     def __str__(self):
         ret = "\nAvailable grid data of dimension "
@@ -1573,6 +1624,8 @@ class AllGridFunctions:
         # We collect all the files by merging the lists into a set. The
         # set will automatically remove repeated entries.
         for file_list in self._vars_h5_files.values():
+            allfiles.update(file_list)
+        for file_list in self._vars_openpmd_files.values():
             allfiles.update(file_list)
         for file_list in self._vars_ascii_files.values():
             allfiles.update(file_list)
@@ -1613,6 +1666,7 @@ class GridFunctionsDir:
     # convenint to index them with numbers. This dictionary provides a way
     # to go from one notation to the other. Internally, we always use the
     # index notation.
+
     _dim_indices = {
         "x": (0,),
         "y": (1,),
@@ -1630,12 +1684,16 @@ class GridFunctionsDir:
         :type sd: :py:class:`~.SimDir`
         """
 
+        # checks if its simdir
         if not isinstance(sd, simdir.SimDir):
             raise TypeError("Input is not SimDir")
 
         # _all_griddata is a dictionary that maps dimension to an object
         # AllGridFunctions, which contains all the variables for which that
         # dimension is available
+
+        # declaring dictionary with the file and dimension is mapped to the data returned by AllGridFunctions()
+        #    (loops through all dimensions in dim_indices dic (012))
         self._all_griddata = {
             dim: AllGridFunctions(sd.allfiles, dim)
             for dim in self._dim_indices.values()
