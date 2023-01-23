@@ -1096,14 +1096,369 @@ class OneGridFunctionH5(BaseOneGridFunction):
             num_ghost = np.zeros_like(shape, dtype=int)
 
         return grid_data.UniformGrid(
-            shape,
+            shape,  # extent
             x0=x0,
-            dx=dx,
+            dx=dx,  # spacing between each point (ex. 1'st to 10'th (extent) --> /9
+            # dx=extent/(shape-1) shape # cells #(likely) size array
             ref_level=ref_level,
-            num_ghost=num_ghost,
+            num_ghost=num_ghost,  # or set to 0
             time=time,
             iteration=iteration,
-            component=component,
+            component=component, # chunk number
+        )
+
+    # What is a context manager?
+    #
+    # Context managers are useful ways to handle resources in Python. With a
+    # context manager, we do not have to worry about releasing resources. Here,
+    # we wrap reading the h5 file with another context manager so that we can
+    # easily get the dataset.
+    @contextmanager
+    def _get_dataset(self, path, iteration, ref_level, component):
+        """Context manager to read an HDF5 file.
+
+        :param path: Path of the file.
+        :type path: str
+        :param iteration: Iteration.
+        :type iteration: int
+        :param ref_level: Refinement level.
+        :type ref_level: int
+        :param component: Component.
+        :type component: int
+
+        """
+        ref_level_str = f" rl={ref_level}" if (ref_level >= 0) else ""
+        component_str = f" c={component}" if (component >= 0) else ""
+        with h5py.File(path, "r") as f:
+            try:
+                yield f[
+                    self.dataset_format
+                    % (iteration, ref_level_str, component_str)
+                ]
+            finally:
+                # All the hard work is done by the other 'with' statement.
+                # We don't need to do anything here.
+                pass
+
+    def _read_component_as_uniform_grid_data(
+        self, path, iteration, ref_level, component
+    ):
+        """Return the component at the given iteration, refinement level, and component.
+
+        :param path: Path of the file.
+        :type path: str
+        :param iteration: Iteration.
+        :type iteration: int
+        :param ref_level: Refinement level.
+        :type ref_level: int
+        :param component: Component.
+        :type component: int
+
+        :returns: Component as a :py:class:`~.UniformGridData`.
+        :rtype: :py:class:`~.UniformGridData`
+
+        """
+
+        if self.alldata[path][iteration][ref_level][component] is None:
+            with self._get_dataset(
+                path, iteration, ref_level, component
+            ) as dataset:
+                grid = self._grid_from_dataset(
+                    dataset, iteration, ref_level, component
+                )
+                data = np.transpose(dataset[()])
+
+                self.alldata[path][iteration][ref_level][
+                    component
+                ] = grid_data.UniformGridData(grid, data)
+
+        return self.alldata[path][iteration][ref_level][component]
+
+    @staticmethod
+    def _are_ghostzones_in_file(path: str, is_3D_file: bool) -> bool:
+        """Return whether the ghostzones were output or not.
+
+        :param path: File to inspect.
+        :type path: str
+        :param is_3D_file: The file contains 3D data
+        :type is_3D_file: bool
+
+        :returns: Whether ``path`` contains ghost zones.
+        :rtype: bool
+
+        """
+        # This is a tricky and important function to stitch together all the
+        # different components. Carpet has an option (technically two) to output
+        # the ghostzones in the files. These are: output_ghost_points and
+        # out3D_ghosts (which is deprecated). For 3D files, when they are both
+        # set to yes, the ghostzones are output in the h5 files. When one of the
+        # two is set to no, the ghostzones are not output. For 2D files, when
+        # it depends only on the value of the first.
+
+        # The default value of these parameters is yes
+        with h5py.File(path, "r") as file_:
+            parameters = file_["Parameters and Global Attributes"]
+            all_pars = parameters["All Parameters"][()].decode().split("\n")
+            # We make sure that everything is lowercase, we are case insensitive
+            iohdf5_pars = [
+                param.lower()
+                for param in all_pars
+                if param.lower().startswith("carpetiohdf5")
+                or param.lower().startswith("iohdf5")
+            ]
+
+            def is_param_true(name: str) -> bool:
+                param = [p for p in iohdf5_pars if name.lower() in p]
+                # When the parameters we are interested in are not set, they are
+                # set to yes by default
+                if len(param) == 0:
+                    return True
+
+                # The parameter is set
+                return (
+                    ("true" in param[0])
+                    or ("yes" in param[0])
+                    or ("1" in param[0])
+                )
+
+            params_to_check = {"output_ghost_points"}
+
+            if is_3D_file:
+                params_to_check.add("out3D_ghosts")
+
+            # Ghostzones are in the file if all the relevant parameters are set
+            # to true
+            return all(is_param_true(param) for param in params_to_check)
+
+    def clear_cache(self):
+        """Remove all the cached entries.
+
+        Every time a component is read, :py:class:`~.OneGridFunctionsH5` caches
+        its value (reading can be expensive). In certain cases, this can lead to
+        an explosion in the size of this object. For example, when reading
+        several iterations to make a movie. This method removes all the cached
+        entries, keeping the size of the object under control.
+        """
+        for filename, file_reader in self.alldata.items():
+            for iteration, iteration_reader in file_reader.items():
+                for ref_level, ref_level_reader in iteration_reader.items():
+                    for component in ref_level_reader.keys():
+                        self.alldata[filename][iteration][ref_level][
+                            component
+                        ] = None
+
+    def time_at_iteration(self, iteration):
+        """Return the time corresponding to the provided iteration.
+
+        :param iteration: Iteration.
+        :type iteration: int
+
+        :returns: Time corresponding to ``iteration``.
+        :rtype: float
+
+        """
+        # If there are multiple files, we take the first.
+        # A case in which there are multiple files is with 3D data
+        path = self._files_with_iteration(iteration)[0]
+
+        ref_levels = self._ref_levels_in_file(path, iteration)
+        components = self._components_in_file(path, iteration, ref_levels[-1])
+        with self._get_dataset(
+            path, iteration, ref_levels[-1], components[-1]
+        ) as dataset:
+            return dataset.attrs["time"]
+
+
+class OneGridFunctionOpenPMD(BaseOneGridFunction):
+    """Read grid data produced by CarpetOpenPMD files.
+
+    This class is derived from :py:class:`~.BaseOneGridFunction` and implements
+    the reading facilities.
+
+    """
+
+    # This class implements the details on how to read the data, most of the
+    # functionalities of the class are in OneGridFunctionBase.
+
+    # Let's unpack the regex, we have 7 capturing groups
+    #
+    # 1. [^:] matches any number of characters (at least one), with the
+    #    exception of ':'
+    # 2. \S+ matches any number of non-whitespace characters (at least
+    #    one).
+    #
+    # 1. and 2. are thorn and variable name, then we have
+    # 3, 4. \d+ matches a number (iteration and time level)
+    # 5. " m=0" matches this exactly, if it is present
+    # 6. \d+ matches a number (refinement level) if present
+    #    (grid arrays don't have this)
+    # Then we have two nested capturing groups
+    # ( c=(\d+))? checked whether c=NUMBER is matched,
+    # and inside we have that the component number is matched
+    #
+    # All the [ ] are meaningful blank spaces. Note, we don't have $^ because
+    # there is more that we do not want to match
+    _pattern_group_name = r"""
+    ([^:]+)             # Thorn name
+    ::
+    (\S+)               # Variable name
+    [ ]
+    it=(\d+)            # Iteration
+    [ ]
+    tl=(\d+)            # Timelevel (almost always 0)
+    ([ ]m=0)?           # Map
+    ([ ]rl=(\d+))?      # Refinement level
+    ([ ]c=(\d+))?       # Chunk
+    """
+
+    def __init__(self, allfiles, var_name: str, dimension):
+        """Constructor.
+
+        :param allfiles: Paths of files associated to the variable.
+        :type allfiles: list of str
+        :param var_name: Variable name.
+        :type var_name: str
+
+        """
+
+        # We need these variables to properly find what dataset to look at in
+        # the HDF5 file.
+        self.thorn_name = None
+        self.map = None
+
+        self.dimension = dimension
+
+        self.rx_group_name = re.compile(self._pattern_group_name, re.VERBOSE)
+
+        super().__init__(allfiles, var_name)
+
+        # super() will fill the other variables that we need for dataset_format
+        if self.map is None:
+            self.map = ""
+
+        # TODO (FEATURE): Make separator customizable
+        #
+        # Technically the separator :: is customizable, so we should be more
+        # flexible.
+
+        self.dataset_format = (
+            f"{self.thorn_name}::{self.var_name} it=%d tl=0{self.map}%s%s"
+        )
+
+        file_is_3D = len(self.dimension) == 3
+
+        # HDF5 files can contain ghostzones or not. Here, we can that all the
+        # files have the same behavior (they all contain, or they all don't)
+        #
+        # self._are_ghostzones_in_file(path) returns True or False, so this
+        # is a set with True, False or a mix
+        ghost_in_files = {
+            self._are_ghostzones_in_file(path, file_is_3D) for path in self.allfiles
+        }
+
+        # Here we check that we only have True or False
+        if len(ghost_in_files) != 1:
+            raise ValueError(
+                "Inconsistent IOHDF5::output_ghost_points across files"
+            )
+
+        # We know that ghost_in_files has only one element (either True or
+        # False), so we pick that (with tuple unpacking)
+        (self.are_ghostzones_in_files,) = ghost_in_files
+
+    def _parse_file(self, path):
+        """Read the content of the given file (without reading the data).
+
+        :param path: Path of the file.
+        :type path: str
+
+        """
+        # This will give us an overview of what is available in the provided
+        # file. We keep a collection of all these in the variable self.alldata
+        rx_mesh = re.compile(r"^([a-zA-Z0-9]+)_([a-zA-Z0-9_]+)_lev([0-9]+)$")
+
+        dir_path = os.path.split(path)[0]
+        print("path={}".format(path))
+        print("dir_path={}".format(dir_path))
+        self.series = io.Series(dir_path, io.Access.read_only)
+        self.iterations = self.series.iterations
+        for iter_item in self.iterations.items():
+            iter_no = iter_item[0]
+            print("Iter # = {}".format(iter_no))
+            iter_obj = iter_item[1]
+            print("Iter dt={}, time={}".format(iter_obj.dt, iter_obj.time))
+            all_mesh = iter_obj.meshes
+            time_level = 0  # int(iter_obj.time)
+            for mesh in all_mesh.items():
+                mesh_name = mesh[0]
+                mesh_obj = mesh[1]
+                print("Mesh = {}".format(mesh_name))
+                matched = rx_mesh.match(mesh_name)
+                print("matched = {}".format(matched))
+                self.thorn_name = matched.group(1)
+                ref_level = matched.group(3)
+                self.map = None
+                # Here is where we prepare are nested alldata dictionary
+                alldata_file = self.alldata.setdefault(path, {})
+                alldata_iteration = alldata_file.setdefault(iter_no, {})
+                alldata_ref_level = alldata_iteration.setdefault(ref_level, {})
+                for mesh_var in mesh_obj.items():  # loop through all variables in specific mesh
+                    var_name = mesh_var[0]
+                    var_data = mesh_var[1]  # 3d array
+                    if var_name == "admbase_alp":
+                        print("  {0} variable found".format(var_name, var_data))
+                        mrc = mesh_obj[var_name]
+                        print("  array shape = {}".format(mrc.shape))
+                        chunks = mrc.available_chunks()
+                        index = 0
+                        for chunk in chunks:
+                            component = index
+                            # We set the actual data to None, and we will read it in
+                            # _read_component_as_uniform_grid_data upon request
+                            alldata_ref_level.setdefault(component, None)
+                            index += 1
+
+    def _grid_from_dataset(self, dataset, iteration, ref_level, component):
+        """Return a :py:class:`~.UniformGrid` from a given HDF5 dataset.
+
+        :param dataset: Dataset to model the grid after.
+        :type dataset: H5py.dataset
+        :param iteration: Iteration.
+        :type iteration: int
+        :param ref_level: Refinement level.
+        :type ref_level: int
+        :param component: Component.
+        :type component: int
+
+        :returns: Grid corresponding to the dataset.
+        :rtype: :py:class:`~.UniformGrid`
+
+        """
+
+        # NOTE: Why are we taking the reverse?
+        shape = np.array(dataset.shape[::-1])
+
+        x0 = dataset.attrs["origin"]
+        dx = dataset.attrs["delta"]
+        time = dataset.attrs["time"]
+        # With the .get we ensure that if "cctk_nghostzones" cannot be read, we
+        # have returned None, which we can test later
+        num_ghost = dataset.attrs.get("cctk_nghostzones", None)
+        # If we do not have the ghostzones in the file, then it is as if we
+        # have ghostzones of size zero.
+        if not self.are_ghostzones_in_files or num_ghost is None:
+            num_ghost = np.zeros_like(shape, dtype=int)
+
+        return grid_data.UniformGrid(
+            shape,  # extent
+            x0=x0,
+            dx=dx,  # spacing between each point (ex. 1'st to 10'th (extent) --> /9
+            # dx=extent/(shape-1) shape # cells #(likely) size array
+            ref_level=ref_level,
+            num_ghost=num_ghost,  # or set to 0
+            time=time,
+            iteration=iteration,
+            component=component, # chunk number
         )
 
     # What is a context manager?
@@ -1375,7 +1730,7 @@ class AllGridFunctions:
             r"asc(\.(gz|bz2))?",
         )
         # Define pattern expression for bp file names
-        openpmd_pattern = r"^(\w+).it(\d+).bp$"
+        openpmd_pattern = r"^(\w+)\.it(\d+)\.bp$"
 
         # Variable files is a dictionary, the keys are the variables, the
         # values the set of files associated to that variable
@@ -1512,7 +1867,6 @@ class AllGridFunctions:
                         print("Iter # = {}".format(iter_no))
                         iter_obj = iter_item[1]
                         print("Iter dt = {}, time = {}".format(iter_obj.dt, iter_obj.time))
-
                         all_mesh = iter_obj.meshes
                         for mesh in all_mesh.items():
                             mesh_name = mesh[0]
@@ -1521,10 +1875,9 @@ class AllGridFunctions:
                             if mesh_name.startswith("admbase_lapse_"):
                                 for mesh_var in mesh_obj.items():
                                     variable_name = mesh_var[0]
-                                    var_list = self._vars_openpmd_files.setdefault(
-                                        variable_name, set()
-                                    )
-                                    var_list.add(f)
+                                    print("variable_name={}".format(variable_name))
+                                    self._vars_openpmd_files[variable_name] = f
+                                    print("self.vars_openpmd_files={}".format(self._vars_openpmd_files))
 
         # What pythonize_name_dict does is to make the various variables
         # accessible as attributes, e.g. self.fields.rho
@@ -1543,6 +1896,10 @@ class AllGridFunctions:
                 self._vars[var_name] = OneGridFunctionH5(
                     self._vars_h5_files[var_name], var_name, self.dimension
                 )
+            elif var_name in self._vars_openpmd_files:
+                self._vars[var_name] = OneGridFunctionOpenPMD(
+                    self._vars_openpmd_files[var_name], var_name, self.dimension
+                )
             elif var_name in self._vars_ascii_files:
                 if self.num_ghost is None:
                     warnings.warn(
@@ -1554,10 +1911,6 @@ class AllGridFunctions:
                     self._vars_ascii_files[var_name],
                     var_name,
                     num_ghost=self.num_ghost,
-                )
-            elif var_name in self._vars_bp_files:
-                self._vars[var_name] = OneGridFunctionOpenPMD(
-                    self._vars_bp_files[var_name], var_name, self.dimension
                 )
 
         return self._vars[var_name]
