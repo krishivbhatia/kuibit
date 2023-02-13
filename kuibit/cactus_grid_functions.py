@@ -114,9 +114,7 @@ class BaseOneGridFunction(ABC):
 
         """
 
-        # self.allfiles = list(allfiles)
-        self.allfiles = []
-        self.allfiles.append(allfiles)
+        self.allfiles = list(allfiles)
 
         # self.alldata is a nested dictionary
         # 1. At the first level, we have the file
@@ -1315,7 +1313,7 @@ class OneGridFunctionOpenPMD(BaseOneGridFunction):
     ([ ]c=(\d+))?       # Chunk
     """
 
-    iterations = None
+    # iterations = None
 
     def __init__(self, allfiles, var_name: str, dimension):
         """Constructor.
@@ -1381,25 +1379,24 @@ class OneGridFunctionOpenPMD(BaseOneGridFunction):
         """
         # This will give us an overview of what is available in the provided
         # file. We keep a collection of all these in the variable self.alldata
-        rx_mesh = re.compile(r"^(\w)_lev(\d+)$")  # r"^([a-zA-Z_0-9]+)_lev([0-9]+)$"
+        rx_mesh = re.compile(r"^(\w+)_lev(\d+)$")  # r"^([a-zA-Z_0-9]+)_lev([0-9]+)$"
 
-        dir_path = os.path.split(path)[0]
         print("path={}".format(path))
-        print("dir_path={}".format(dir_path))
-        self.series = io.Series(dir_path, io.Access.read_only)
-        self.iterations = self.series.iterations
-        for iter_item in self.iterations.items():
+        self.series = io.Series(path, io.Access.read_only)
+        iter_open_pmd = self.series.iterations
+        for iter_item in iter_open_pmd.items():
             iter_no = iter_item[0]
             print("Iter # = {}".format(iter_no))
             iter_obj = iter_item[1]
             print("Iter dt={}, time={}".format(iter_obj.dt, iter_obj.time))
             all_mesh = iter_obj.meshes
+            print("all_mesh = {}".format(all_mesh.items()))
             time_level = 0  # int(iter_obj.time)
             for mesh in all_mesh.items():
                 mesh_name = mesh[0]
                 mesh_obj = mesh[1]
                 print("Mesh = {}".format(mesh_name))
-                if mesh_name == 'admbase_lapse_lev00':
+                if mesh_name == "admbase_lapse_lev00":
                     matched = rx_mesh.match(mesh_name)
                     print("matched = {}".format(matched))
                     self.thorn_name = matched.group(1)
@@ -1412,23 +1409,23 @@ class OneGridFunctionOpenPMD(BaseOneGridFunction):
                     for mesh_var in mesh_obj.items():  # loop through all variables in specific mesh
                         var_name = mesh_var[0]
                         var_data = mesh_var[1]  # 3d array
-                        print("  {0} variable found".format(var_name, var_data))
+                        print("  {} variable found".format(var_name))
                         mrc = mesh_obj[var_name]
                         print("  array shape = {}".format(mrc.shape))
                         chunks = mrc.available_chunks()
-                        index = 0
+                        chunk_no = 0
                         for chunk in chunks:
-                            component = index
+                            component = chunk_no
                             # We set the actual data to None, and we will read it in
                             # _read_component_as_uniform_grid_data upon request
                             alldata_ref_level.setdefault(component, None)
-                            index += 1
+                            chunk_no += 1
 
     def _grid_from_dataset(self, dataset, iteration, ref_level, component):
         """Return a :py:class:`~.UniformGrid` from a given HDF5 dataset.
 
         :param dataset: Dataset to model the grid after.
-        :type dataset: H5py.dataset
+        :type dataset: H5py.dataset #change
         :param iteration: Iteration.
         :type iteration: int
         :param ref_level: Refinement level.
@@ -1443,6 +1440,7 @@ class OneGridFunctionOpenPMD(BaseOneGridFunction):
 
         # NOTE: Why are we taking the reverse?
         shape = np.array(dataset.shape[::-1])
+
         time = 0
         # With the .get we ensure that if "cctk_nghostzones" cannot be read, we
         # have returned None, which we can test later
@@ -1452,10 +1450,11 @@ class OneGridFunctionOpenPMD(BaseOneGridFunction):
         # if not self.are_ghostzones_in_files or num_ghost is None:
         num_ghost = np.zeros_like(shape, dtype=int)
 
-        all_mesh = self.iterations[iteration].meshes
+        iter_open_pmd = self.series.iterations
+        all_mesh = iter_open_pmd[iteration].meshes
         lapse_mesh = all_mesh["admbase_lapse_lev{}".format(ref_level)]
         mrc = lapse_mesh["admbase_alp"]
-        print("  array shape = {}".format(mrc.shape))
+        print("  mrc array shape = {}".format(mrc.shape))
         chunks = mrc.available_chunks()
         chunk = chunks[component]
         origin = chunk.offset
@@ -1494,12 +1493,11 @@ class OneGridFunctionOpenPMD(BaseOneGridFunction):
         :type component: int
 
         """
-        dir_path = os.path.split(path)[0]
         print("path={}".format(path))
-        print("dir_path={}".format(dir_path))
-        self.series = io.Series(dir_path, io.Access.read_only)
-        self.iterations = self.series.iterations
-        all_mesh = self.iterations[iteration].meshes
+        # with io.Series(dir_path, io.Access.read_only) as self.series:
+        self.series = io.Series(path, io.Access.read_only)
+        iter_open_pmd = self.series.iterations
+        all_mesh = iter_open_pmd[iteration].meshes
         lapse_mesh = all_mesh["admbase_lapse_lev{}".format(ref_level)]
         mrc = lapse_mesh["admbase_alp"]
         print("  array shape = {}".format(mrc.shape))
@@ -1708,7 +1706,7 @@ class AllGridFunctions:
         )
         # Define pattern expression for bp file names
         # Here actual bp data files are passes instead of directories
-        # read only one data file to avoid reading again and again
+        # read only one data file (data.0) to avoid reading again and again
         openpmd_pattern = r"^data\.0$"  # data.0
 
         # Variable files is a dictionary, the keys are the variables, the
@@ -1855,12 +1853,16 @@ class AllGridFunctions:
                         for mesh in all_mesh.items():
                             mesh_name = mesh[0]
                             mesh_obj = mesh[1]
-                            print("Mesh '{0}".format(mesh_name))
-                            if mesh_name.startswith("admbase_lapse_"):
+                            print("Mesh = {}".format(mesh_name))
+                            if mesh_name == "admbase_lapse_lev00":
                                 for mesh_var in mesh_obj.items():
                                     variable_name = mesh_var[0]
                                     print("variable_name={}".format(variable_name))
-                                    self._vars_openpmd_files[variable_name] = f
+                                    var_list = self._vars_openpmd_files.setdefault(
+                                        variable_name, set()
+                                    )
+                                    var_list.add(dir_path)
+                                    # self._vars_openpmd_files[variable_name] = dir_path
                                     print("self.vars_openpmd_files={}".format(self._vars_openpmd_files))
 
         # What pythonize_name_dict does is to make the various variables
@@ -1871,13 +1873,14 @@ class AllGridFunctions:
 
         var_name = str(key)
 
-        # if var_name not in self:
-        #     raise KeyError(f"Variable {key} not present in simulation data")
         print("==================================")
         print("self._vars={}".format(self._vars))
         print("self.dimension={}".format(self.dimension))
         print("self._vars_openpmd_files={}".format(self._vars_openpmd_files))
         print("==================================")
+
+        if var_name not in self:
+            raise KeyError(f"Variable {key} not present in simulation data")
 
         if var_name not in self._vars:
             # We prefer h5
