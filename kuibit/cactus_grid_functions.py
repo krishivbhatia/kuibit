@@ -1439,7 +1439,8 @@ class OneGridFunctionOpenPMD(BaseOneGridFunction):
         """
 
         # NOTE: Why are we taking the reverse?
-        shape = np.array(dataset.shape[::-1])
+        # shape = np.array(dataset.shape[::-1])
+        shape = np.array(dataset.shape)
 
         time = 0
         # With the .get we ensure that if "cctk_nghostzones" cannot be read, we
@@ -1532,7 +1533,8 @@ class OneGridFunctionOpenPMD(BaseOneGridFunction):
         if self.alldata[path][iteration][ref_level][component] is None:
             dataset = self._get_dataset(path, iteration, ref_level, component)
             grid = self._grid_from_dataset(dataset, iteration, ref_level, component)
-            data = np.transpose(dataset[()])
+            # data = np.transpose(dataset[()])
+            data = dataset[()]
 
             self.alldata[path][iteration][ref_level][
                 component
