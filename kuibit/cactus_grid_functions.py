@@ -131,7 +131,6 @@ class BaseOneGridFunction(ABC):
         # We use this to extract only the information related to the specific
         # variable
         self.var_name = var_name
-        print("self.allfiles={}".format(self.allfiles))
         for path in self.allfiles:
             self._parse_file(path)
 
@@ -184,7 +183,6 @@ class BaseOneGridFunction(ABC):
 
         """
         # return sorted(list(self.alldata[path].keys()))
-        print(self.alldata[path])
         return sorted(self.alldata[path].keys())
 
     def _min_iteration_in_file(self, path):
@@ -1379,7 +1377,7 @@ class OneGridFunctionOpenPMD(BaseOneGridFunction):
         """
         # This will give us an overview of what is available in the provided
         # file. We keep a collection of all these in the variable self.alldata
-        rx_mesh = re.compile(r"^(\w+)_lev(\d+)$")  # r"^([a-zA-Z_0-9]+)_lev([0-9]+)$"
+        rx_mesh = re.compile(r"^(\w+)_rl(\d+)$")  # r"^([a-zA-Z_0-9]+)_lev([0-9]+)$"
 
         print("path={}".format(path))
         self.series = io.Series(path, io.Access.read_only)
@@ -1396,7 +1394,7 @@ class OneGridFunctionOpenPMD(BaseOneGridFunction):
                 mesh_name = mesh[0]
                 mesh_obj = mesh[1]
                 print("Mesh = {}".format(mesh_name))
-                if mesh_name == "admbase_lapse_lev00":
+                if mesh_name == mesh_name: # "admbase_lapse_lev00":
                     matched = rx_mesh.match(mesh_name)
                     print("matched = {}".format(matched))
                     self.thorn_name = matched.group(1)
@@ -1453,26 +1451,29 @@ class OneGridFunctionOpenPMD(BaseOneGridFunction):
 
         iter_open_pmd = self.series.iterations
         all_mesh = iter_open_pmd[iteration].meshes
-        lapse_mesh = all_mesh["admbase_lapse_lev{}".format(ref_level)]
-        mrc = lapse_mesh["admbase_alp"]
-        print("  mrc array shape = {}".format(mrc.shape))
-        chunks = mrc.available_chunks()
-        chunk = chunks[component]
-        origin = chunk.offset
-        extent = chunk.extent
-        cell_largest_coord = (origin[0] + extent[0],
-                              origin[1] + extent[1],
-                              origin[2] + extent[2])
-        return grid_data.UniformGrid(
-            shape,
-            x0=origin,
-            x1=cell_largest_coord,
-            ref_level=ref_level,
-            num_ghost=num_ghost,
-            time=time,
-            iteration=iteration,
-            component=component,
-        )
+        for k_m, m in all_mesh.items():
+            mesh = k_m
+            for b in m.items():
+                if b[0] == self.var_name:
+                    mrc = b[1]
+                    print("  mrc array shape = {}".format(mrc.shape))
+                    chunks = mrc.available_chunks()
+                    chunk = chunks[component]
+                    origin = chunk.offset
+                    extent = chunk.extent
+                    cell_largest_coord = (origin[0] + extent[0],
+                                          origin[1] + extent[1],
+                                          origin[2] + extent[2])
+                    return grid_data.UniformGrid(
+                            shape,
+                            x0=origin,
+                            x1=cell_largest_coord,
+                            ref_level=ref_level,
+                            num_ghost=num_ghost,
+                            time=time,
+                            iteration=iteration,
+                            component=component,
+                    )
 
     # What is a context manager?
     #
@@ -1499,17 +1500,20 @@ class OneGridFunctionOpenPMD(BaseOneGridFunction):
         self.series = io.Series(path, io.Access.read_only)
         iter_open_pmd = self.series.iterations
         all_mesh = iter_open_pmd[iteration].meshes
-        lapse_mesh = all_mesh["admbase_lapse_lev{}".format(ref_level)]
-        mrc = lapse_mesh["admbase_alp"]
-        print("  array shape = {}".format(mrc.shape))
-        chunks = mrc.available_chunks()
-        chunk = chunks[component]
-        alp_load = mrc.load_chunk(chunk.offset, chunk.extent)
-        self.series.flush()
-        print("Chunk loaded. Offset={}, extent={}. [5][5][5]={}".format(
-            chunk.offset, chunk.extent, alp_load[5][5][5])
-        )
-        return alp_load
+        for k_m, m in all_mesh.items():
+            mesh = k_m
+            for b in m.items():
+                if b[0] == self.var_name:
+                    mrc = b[1]
+                    print("  mrc array shape = {}".format(mrc.shape))
+                    chunks = mrc.available_chunks()
+                    chunk = chunks[component] 
+                    alp_load = mrc.load_chunk(chunk.offset, chunk.extent)
+                    self.series.flush()
+                    print("Chunk loaded. Offset={}, extent={}. [5][5][5]={}".format(
+                        chunk.offset, chunk.extent, alp_load[5][5][5])
+                    )
+                    return alp_load
 
     def _read_component_as_uniform_grid_data(
         self, path, iteration, ref_level, component
@@ -1533,7 +1537,6 @@ class OneGridFunctionOpenPMD(BaseOneGridFunction):
         if self.alldata[path][iteration][ref_level][component] is None:
             dataset = self._get_dataset(path, iteration, ref_level, component)
             grid = self._grid_from_dataset(dataset, iteration, ref_level, component)
-            # data = np.transpose(dataset[()])
             data = dataset[()]
 
             self.alldata[path][iteration][ref_level][
@@ -1856,7 +1859,7 @@ class AllGridFunctions:
                             mesh_name = mesh[0]
                             mesh_obj = mesh[1]
                             print("Mesh = {}".format(mesh_name))
-                            if mesh_name == "admbase_lapse_lev00":
+                            if mesh_name == mesh_name: # "admbase_lapse_lev00":
                                 for mesh_var in mesh_obj.items():
                                     variable_name = mesh_var[0]
                                     print("variable_name={}".format(variable_name))
@@ -1865,7 +1868,6 @@ class AllGridFunctions:
                                     )
                                     var_list.add(dir_path)
                                     # self._vars_openpmd_files[variable_name] = dir_path
-                                    print("self.vars_openpmd_files={}".format(self._vars_openpmd_files))
 
         # What pythonize_name_dict does is to make the various variables
         # accessible as attributes, e.g. self.fields.rho
