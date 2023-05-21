@@ -64,6 +64,8 @@ from gzip import open as gopen
 
 import h5py
 import numpy as np
+import json
+import adios2
 
 from kuibit import grid_data, simdir
 from kuibit.attr_dict import pythonize_name_dict
@@ -71,6 +73,10 @@ from kuibit.cactus_ascii_utils import scan_header, total_filesize
 
 # adding open_api import to read bp files
 import openpmd_api as io
+
+
+config = {'adios2': {'engine': {}, 'dataset': {}}}
+config['adios2']['engine'] = {'parameters': {'Threads': '4'}}
 
 
 class BaseOneGridFunction(ABC):
@@ -1377,10 +1383,10 @@ class OneGridFunctionOpenPMD(BaseOneGridFunction):
         """
         # This will give us an overview of what is available in the provided
         # file. We keep a collection of all these in the variable self.alldata
-        rx_mesh = re.compile(r"^(\w+)_rl(\d+)$")  # r"^([a-zA-Z_0-9]+)_lev([0-9]+)$"
+        rx_mesh = re.compile(r"^(\w+)_lev(\d+)$")  # r"^([a-zA-Z_0-9]+)_lev([0-9]+)$"
 
         print("path={}".format(path))
-        self.series = io.Series(path, io.Access.read_only)
+        self.series = io.Series(path, io.Access.read_only, json.dumps(config))
         iter_open_pmd = self.series.iterations
         for iter_item in iter_open_pmd.items():
             iter_no = iter_item[0]
@@ -1496,8 +1502,7 @@ class OneGridFunctionOpenPMD(BaseOneGridFunction):
 
         """
         print("path={}".format(path))
-        # with io.Series(dir_path, io.Access.read_only) as self.series:
-        self.series = io.Series(path, io.Access.read_only)
+        self.series = io.Series(path, io.Access.read_only, json.dumps(config))
         iter_open_pmd = self.series.iterations
         all_mesh = iter_open_pmd[iteration].meshes
         for k_m, m in all_mesh.items():
@@ -1847,7 +1852,8 @@ class AllGridFunctions:
                 if self.dimension == (0, 1, 2):
                     dir_path = os.path.split(f)[0]
                     print("dir_path={}".format(dir_path))
-                    series = io.Series(dir_path, io.Access.read_only)
+                    print("config = {}".format(config))
+                    series = io.Series(dir_path, io.Access.read_only, json.dumps(config))
                     iterations = series.iterations
                     for iter_item in iterations.items():
                         iter_no = iter_item[0]
