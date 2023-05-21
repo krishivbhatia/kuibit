@@ -64,8 +64,6 @@ from gzip import open as gopen
 
 import h5py
 import numpy as np
-import json
-import adios2
 
 from kuibit import grid_data, simdir
 from kuibit.attr_dict import pythonize_name_dict
@@ -73,6 +71,10 @@ from kuibit.cactus_ascii_utils import scan_header, total_filesize
 
 # adding open_api import to read bp files
 import openpmd_api as io
+
+# for reading ADIOS2 bp4 and bp5 files
+import json
+import adios2
 
 
 config = {'adios2': {'engine': {}, 'dataset': {}}}
