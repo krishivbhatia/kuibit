@@ -1461,21 +1461,27 @@ class OneGridFunctionOpenPMD(BaseOneGridFunction):
         all_mesh = iter_open_pmd[iteration].meshes
         for k_m, m in all_mesh.items():
             mesh = k_m
+            origin = m.grid_global_offset
+            grid_spacing = m.grid_spacing
             for b in m.items():
                 if b[0] == self.var_name:
                     mrc = b[1]
-                    print("  mrc array shape = {}".format(mrc.shape))
                     chunks = mrc.available_chunks()
                     chunk = chunks[component]
-                    origin = chunk.offset
+                    offset = chunk.offset
                     extent = chunk.extent
-                    cell_largest_coord = (origin[0] + extent[0],
-                                          origin[1] + extent[1],
-                                          origin[2] + extent[2])
+                    x0 = (origin[0] + offset[0] * grid_spacing[0],
+                          origin[1] + offset[1] * grid_spacing[1],
+                          origin[2] + offset[2] * grid_spacing[2])
+                    x1 = (x0[0] + extent[0] * grid_spacing[0],
+                          x0[1] + extent[1] * grid_spacing[1],
+                          x0[2] + extent[2] * grid_spacing[2])
+                    print("  grid_global_offset={0}, grid_spacing={1}".format(origin, grid_spacing))
+                    print("  mrc array shape={0}, x0={1}, x1={2}".format(mrc.shape, x0, x1))
                     return grid_data.UniformGrid(
                             shape,
-                            x0=origin,
-                            x1=cell_largest_coord,
+                            x0=x0,
+                            x1=x1,
                             ref_level=ref_level,
                             num_ghost=num_ghost,
                             time=time,
