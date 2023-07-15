@@ -55,6 +55,7 @@ Uses variable(s) parameter and parses the file for the variable to read data
 
 import os
 import re
+import sys
 import warnings
 from abc import ABC, abstractmethod
 from bz2 import open as bopen
@@ -66,6 +67,7 @@ import h5py
 import numpy as np
 
 from kuibit import grid_data, simdir
+from kuibit import grid_data_utils as gdu
 from kuibit.attr_dict import pythonize_name_dict
 from kuibit.cactus_ascii_utils import scan_header, total_filesize
 
@@ -190,7 +192,6 @@ class BaseOneGridFunction(ABC):
         :rtype: list
 
         """
-        # return sorted(list(self.alldata[path].keys()))
         return sorted(self.alldata[path].keys())
 
     def _min_iteration_in_file(self, path):
@@ -1410,7 +1411,7 @@ class OneGridFunctionOpenPMD(BaseOneGridFunction):
                     self.map = None
                     # Here is where we prepare are nested alldata dictionary
                     alldata_file = self.alldata.setdefault(path, {})
-                    alldata_iteration = alldata_file.setdefault(iter_no, {})
+                    alldata_iteration = alldata_file.setdefault(int(iter_no), {})
                     alldata_ref_level = alldata_iteration.setdefault(ref_level, {})
                     for mesh_var in mesh_obj.items():  # loop through all variables in specific mesh
                         var_name = mesh_var[0]
@@ -1447,8 +1448,8 @@ class OneGridFunctionOpenPMD(BaseOneGridFunction):
         # NOTE: Why are we taking the reverse?
         # shape = np.array(dataset.shape[::-1])
         shape = np.array(dataset.shape)
-
         time = 0
+        rx_mesh = re.compile(r"^(\w+)_lev(\d+)$")
         # With the .get we ensure that if "cctk_nghostzones" cannot be read, we
         # have returned None, which we can test later
         # num_ghost = dataset.attrs.get("cctk_nghostzones", None)
@@ -1456,38 +1457,42 @@ class OneGridFunctionOpenPMD(BaseOneGridFunction):
         # have ghostzones of size zero.
         # if not self.are_ghostzones_in_files or num_ghost is None:
         num_ghost = np.zeros_like(shape, dtype=int)
-
         iter_open_pmd = self.series.iterations
         all_mesh = iter_open_pmd[iteration].meshes
         for k_m, m in all_mesh.items():
             mesh = k_m
-            origin = m.grid_global_offset
-            grid_spacing = m.grid_spacing
-            for b in m.items():
-                if b[0] == self.var_name:
-                    mrc = b[1]
-                    chunks = mrc.available_chunks()
-                    chunk = chunks[component]
-                    offset = chunk.offset
-                    extent = chunk.extent
-                    x0 = (origin[0] + offset[0] * grid_spacing[0],
-                          origin[1] + offset[1] * grid_spacing[1],
-                          origin[2] + offset[2] * grid_spacing[2])
-                    x1 = (x0[0] + extent[0] * grid_spacing[0],
-                          x0[1] + extent[1] * grid_spacing[1],
-                          x0[2] + extent[2] * grid_spacing[2])
-                    print("  grid_global_offset={0}, grid_spacing={1}".format(origin, grid_spacing))
-                    print("  mrc array shape={0}, x0={1}, x1={2}".format(mrc.shape, x0, x1))
-                    return grid_data.UniformGrid(
-                            shape,
-                            x0=x0,
-                            x1=x1,
-                            ref_level=ref_level,
-                            num_ghost=num_ghost,
-                            time=time,
-                            iteration=iteration,
-                            component=component,
-                    )
+            matched = rx_mesh.match(mesh)
+            print("  matched = {}".format(matched))
+            ref_lvl_matched = matched.group(2)
+            print("  ref_lvl matched={}".format(ref_lvl_matched))
+            if ref_level == ref_lvl_matched:
+                origin = m.grid_global_offset
+                grid_spacing = m.grid_spacing
+                for b in m.items():
+                    if b[0] == self.var_name:
+                        mrc = b[1]
+                        chunks = mrc.available_chunks()
+                        chunk = chunks[component]
+                        offset = chunk.offset
+                        extent = chunk.extent
+                        x0 = (origin[0] + offset[0] * grid_spacing[0],
+                              origin[1] + offset[1] * grid_spacing[1],
+                              origin[2] + offset[2] * grid_spacing[2])
+                        x1 = (x0[0] + extent[0] * grid_spacing[0],
+                              x0[1] + extent[1] * grid_spacing[1],
+                              x0[2] + extent[2] * grid_spacing[2])
+                        print("  grid_global_offset={0}, grid_spacing={1}".format(origin, grid_spacing))
+                        print("  mrc array shape={0}, x0={1}, x1={2}".format(mrc.shape, x0, x1))
+                        return grid_data.UniformGrid(
+                                shape,
+                                x0=x0,
+                                x1=x1,
+                                ref_level=ref_level,
+                                num_ghost=num_ghost,
+                                time=time,
+                                iteration=iteration,
+                                component=component,
+                        )
 
     # What is a context manager?
     #
@@ -1509,6 +1514,7 @@ class OneGridFunctionOpenPMD(BaseOneGridFunction):
         :type component: int
 
         """
+
         print("path={}".format(path))
         self.series = io.Series(path, io.Access.read_only, json.dumps(config))
         iter_open_pmd = self.series.iterations

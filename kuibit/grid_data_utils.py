@@ -146,6 +146,7 @@ def merge_uniform_grids(
     num_ghost = _extract_property("num_ghost")
 
     dx = [g.dx for g in grids]
+    print("*** dx={} ***".format(dx))
 
     if not np.allclose(dx, dx[0]):
         raise ValueError("Can only merge grids with the same spacing.")
