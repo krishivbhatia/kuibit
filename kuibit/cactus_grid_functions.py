@@ -1516,23 +1516,27 @@ class OneGridFunctionOpenPMD(BaseOneGridFunction):
         """
 
         print("path={}".format(path))
+        rx_mesh = re.compile(r"^(\w+)_lev(\d+)$")
         self.series = io.Series(path, io.Access.read_only, json.dumps(config))
         iter_open_pmd = self.series.iterations
         all_mesh = iter_open_pmd[iteration].meshes
         for k_m, m in all_mesh.items():
             mesh = k_m
-            for b in m.items():
-                if b[0] == self.var_name:
-                    mrc = b[1]
-                    print("  mrc array shape = {}".format(mrc.shape))
-                    chunks = mrc.available_chunks()
-                    chunk = chunks[component] 
-                    alp_load = mrc.load_chunk(chunk.offset, chunk.extent)
-                    self.series.flush()
-                    print("Chunk loaded. Offset={}, extent={}. [5][5][5]={}".format(
-                        chunk.offset, chunk.extent, alp_load[5][5][5])
-                    )
-                    return alp_load
+            matched = rx_mesh.match(mesh)
+            ref_lvl_matched = matched.group(2)
+            if ref_level == ref_lvl_matched:
+                for b in m.items():
+                    if b[0] == self.var_name:
+                        mrc = b[1]
+                        print("  mrc array shape = {}".format(mrc.shape))
+                        chunks = mrc.available_chunks()
+                        chunk = chunks[component] 
+                        alp_load = mrc.load_chunk(chunk.offset, chunk.extent)
+                        self.series.flush()
+                        print("Chunk loaded. Offset={}, extent={}. [5][5][5]={}".format(
+                            chunk.offset, chunk.extent, alp_load[5][5][5])
+                        )   
+                        return alp_load
 
     def _read_component_as_uniform_grid_data(
         self, path, iteration, ref_level, component
