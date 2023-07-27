@@ -1403,7 +1403,7 @@ class OneGridFunctionOpenPMD(BaseOneGridFunction):
                 mesh_name = mesh[0]
                 mesh_obj = mesh[1]
                 print("Mesh = {}".format(mesh_name))
-                if mesh_name == mesh_name: # "admbase_lapse_lev00":
+                if mesh_name == mesh_name: 
                     matched = rx_mesh.match(mesh_name)
                     print("matched = {}".format(matched))
                     self.thorn_name = matched.group(1)
@@ -1468,6 +1468,8 @@ class OneGridFunctionOpenPMD(BaseOneGridFunction):
             if ref_level == ref_lvl_matched:
                 origin = m.grid_global_offset
                 grid_spacing = m.grid_spacing
+                axis_labels = m.axis_labels
+                grid_unit_SI = m.grid_unit_SI
                 for b in m.items():
                     if b[0] == self.var_name:
                         mrc = b[1]
@@ -1478,10 +1480,10 @@ class OneGridFunctionOpenPMD(BaseOneGridFunction):
                         x0 = (origin[0] + offset[0] * grid_spacing[0],
                               origin[1] + offset[1] * grid_spacing[1],
                               origin[2] + offset[2] * grid_spacing[2])
-                        x1 = (x0[0] + extent[0] * grid_spacing[0],
-                              x0[1] + extent[1] * grid_spacing[1],
-                              x0[2] + extent[2] * grid_spacing[2])
-                        print("  grid_global_offset={0}, grid_spacing={1}".format(origin, grid_spacing))
+                        x1 = (x0[0] + (extent[0]-1) * grid_spacing[0],
+                              x0[1] + (extent[1]-1) * grid_spacing[1],
+                              x0[2] + (extent[2]-1) * grid_spacing[2])
+                        print("  grid_global_offset={0}, grid_spacing={1}, axis_labels={2}, grid_unit_SI={3}".format(origin, grid_spacing, axis_labels, grid_unit_SI))
                         print("  mrc array shape={0}, x0={1}, x1={2}".format(mrc.shape, x0, x1))
                         return grid_data.UniformGrid(
                                 shape,
