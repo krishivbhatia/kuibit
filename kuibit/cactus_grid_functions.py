@@ -1108,7 +1108,6 @@ class OneGridFunctionH5(BaseOneGridFunction):
             shape,  # extent
             x0=x0,
             dx=dx,  # spacing between each point (ex. 1'st to 10'th (extent) --> /9
-            # dx=extent/(shape-1) shape # cells #(likely) size array
             ref_level=ref_level,
             num_ghost=num_ghost,  # or set to 0
             time=time,
