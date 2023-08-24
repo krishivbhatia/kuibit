@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # PYTHON_ARGCOMPLETE_OK
 
-# Copyright (C) 2021-2022 Gabriele Bozzola
+# Copyright (C) 2021-2023 Gabriele Bozzola
 #
 # This program is free software; you can redistribute it and/or modify it under
 # the terms of the GNU General Public License as published by the Free Software
@@ -21,7 +21,7 @@ import logging
 import matplotlib.pyplot as plt
 
 from kuibit import argparse_helper as kah
-from kuibit.cactus_horizons import compute_horizons_separation
+from kuibit.hor_utils import compute_separation
 from kuibit.simdir import SimDir
 from kuibit.visualize_matplotlib import (
     get_figname,
@@ -31,8 +31,6 @@ from kuibit.visualize_matplotlib import (
 )
 
 if __name__ == "__main__":
-    setup_matplotlib()
-
     desc = f"""\
 {kah.get_program_name()} plots the coordinate separation between the centroids
 of two given apparent horizons."""
@@ -50,6 +48,7 @@ of two given apparent horizons."""
     )
 
     args = kah.get_args(parser)
+    setup_matplotlib(rc_par_file=args.mpl_rc_file)
 
     # Parse arguments
 
@@ -69,7 +68,6 @@ of two given apparent horizons."""
         ignore_symlinks=args.ignore_symlinks,
         pickle_file=args.pickle_file,
     ) as sim:
-
         logger.debug("Prepared SimDir")
         sim_hor = sim.horizons
 
@@ -87,7 +85,7 @@ of two given apparent horizons."""
         h1 = sim_hor.get_apparent_horizon(args.horizons[0])
         h2 = sim_hor.get_apparent_horizon(args.horizons[1])
 
-        separation = compute_horizons_separation(h1, h2, resample=True)
+        separation = compute_separation(h1, h2, resample=True)
 
         logger.debug("Plotting separation")
         plt.plot(separation)

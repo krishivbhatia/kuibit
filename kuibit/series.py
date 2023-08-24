@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-# Copyright (C) 2020-2022 Gabriele Bozzola
+# Copyright (C) 2020-2023 Gabriele Bozzola
 #
 # This program is free software; you can redistribute it and/or modify it under
 # the terms of the GNU General Public License as published by the Free Software
@@ -35,12 +35,15 @@ takes a list of series and resamples them to their common points.
 """
 
 import warnings
+from typing import Tuple
 
 import numpy as np
+import numpy.typing as npty
 from scipy import integrate, interpolate, signal
 
 from kuibit.attr_dict import AttributeDictionary
 from kuibit.numerical import BaseNumerical
+from kuibit.tensor import Tensor
 
 
 class _AttributeDictionaryNumPy(AttributeDictionary):
@@ -401,6 +404,81 @@ class BaseSeries(BaseNumerical):
         """
         return self.x[np.argmin(np.abs(self.y))]
 
+    def _local_extrema(
+        self, y: npty.NDArray, *args, include_edges: bool = True, **kwargs
+    ) -> Tuple[npty.NDArray]:
+        """Use SciPy's ``find_peaks`` to find the local minima and maxima.
+
+        Unkown arguments are passed to ``find_peaks``.
+
+        If the signal is complex, the absolute value is taken.
+
+        If ``include_edges`` is True, the edges are considered among the
+        possible extrema.
+
+        :returns: Coordinate and value of the peaks.
+        :rtype: Tuple of NumPy arrays
+
+        """
+        # TODO (FEATURE): Improve accuracy
+        #
+        # We can use splines or quadratic approximations to improve the location
+        # the peak (ie, find it within a cell)
+
+        offset = 0
+        if include_edges:
+            # https://stackoverflow.com/a/60096220
+            min_y = (min(y),)
+            y = np.concatenate((min_y, y, min_y))
+            offset = 1
+
+        peak_indices, _ = signal.find_peaks(y, *args, **kwargs)
+
+        # If we included the edges, we added an extra point, se we have to
+        # remove the offset
+        peak_indices = peak_indices - offset
+        return self.x[peak_indices], self.y[peak_indices]
+
+    def local_maxima(
+        self, *args, include_edges: bool = True, **kwargs
+    ) -> Tuple[npty.NDArray]:
+        """Use SciPy's ``find_peaks`` to find the local maxima.
+
+        Unkown arguments are passed to ``find_peaks``.
+
+        If the signal is complex, the absolute value is taken.
+
+        If ``include_edges`` is True, the edges are considered among the
+        possible maxima.
+
+        :returns: Coordinate and value of the peaks.
+        :rtype: Tuple of NumPy arrays
+        """
+        y = abs(self.y) if self.is_complex() else self.y
+        return self._local_extrema(
+            y, *args, include_edges=include_edges, **kwargs
+        )
+
+    def local_minima(
+        self, *args, include_edges: bool = True, **kwargs
+    ) -> Tuple[npty.NDArray]:
+        """Use SciPy's ``find_peaks`` to find the local minima.
+
+        Unkown arguments are passed to ``find_peaks``.
+
+        If the signal is complex, the absolute value is taken.
+
+        If ``include_edges`` is True, the edges are considered among the
+        possible minima.
+
+        :returns: Coordinate and value of the minima.
+        :rtype: Tuple of NumPy arrays
+        """
+        y = -abs(self.y) if self.is_complex() else -self.y
+        return self._local_extrema(
+            y, *args, include_edges=include_edges, **kwargs
+        )
+
     def _make_spline(self, *args, k=3, s=0, **kwargs):
         """Private function to make spline representation of the data.
 
@@ -521,7 +599,10 @@ class BaseSeries(BaseNumerical):
         # This can speed up some computations.
         copied = type(self).__new__(self.__class__)
         # We don't use the setters
+
+        # skipcq PYL-W0212
         copied.__data_x = self.__data_x.copy()
+        # skipcq PYL-W0212
         copied.__data_y = self.__data_y.copy()
         if not self.invalid_spline:
             # splines are tuples, with a direct call to the function
@@ -631,6 +712,17 @@ class BaseSeries(BaseNumerical):
                 self.x, function(self.y, other, *args, **kwargs), True
             )
 
+        # If it is a Tensor of type(self), we have to return a Tensor
+        if isinstance(other, Tensor) and type(self) is other.type:
+            # We keep this at the high level
+            return type(other).from_shape_and_flat_data(
+                other.shape,
+                [
+                    function(ot, self, *args, **kwargs)
+                    for ot in other.flat_data
+                ],
+            )
+
         # If we are here, it is because we cannot add the two objects
         raise TypeError("I don't know how to combine these objects")
 
@@ -641,6 +733,14 @@ class BaseSeries(BaseNumerical):
                 self.y, other.y, atol=1e-14
             )
         return False
+
+    # From Python's docs: In order to conform to the object model, classes that
+    # define their own equality method should also define their own hash method,
+    # or be unhashable.
+
+    # We consider series unhashable. We could make them hashable by taking
+    # the combined hash of all the points, but this would not be useful.
+    __hash__ = None
 
     def _apply_to_self(self, f, *args, **kwargs):
         """Apply the method ``f`` to ``self``, modifying ``self``.
@@ -955,7 +1055,7 @@ class BaseSeries(BaseNumerical):
 
         :param init: Data with ``x <= init`` will be removed.
         :type init: float or None
-        :param end: Data with ``x >= init`` will be removed.
+        :param end: Data with ``x >= end`` will be removed.
         :type end: float or None
 
         :returns:  Series with enforced minimum and maximum
@@ -981,7 +1081,7 @@ class BaseSeries(BaseNumerical):
 
         :param init: Data with ``x <= init`` will be removed.
         :type init: float or None
-        :param end: Data with ``x >= init`` will be removed.
+        :param end: Data with ``x >= end`` will be removed.
         :type end: float or None
 
         """

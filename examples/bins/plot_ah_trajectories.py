@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-# Copyright (C) 2020-2022 Gabriele Bozzola
+# Copyright (C) 2020-2023 Gabriele Bozzola
 #
 # This program is free software; you can redistribute it and/or modify it under
 # the terms of the GNU General Public License as published by the Free Software
@@ -31,8 +31,6 @@ from kuibit.visualize_matplotlib import (
 )
 
 if __name__ == "__main__":
-    setup_matplotlib()
-
     desc = f"""{kah.get_program_name()} plots the trajectories of given apparent horizons on
 a plane. Optionally, it also plots the outline of the horizons."""
 
@@ -69,6 +67,7 @@ a plane. Optionally, it also plots the outline of the horizons."""
         action="store_true",
     )
     args = kah.get_args(parser)
+    setup_matplotlib(rc_par_file=args.mpl_rc_file)
 
     # Parse arguments
 
@@ -90,7 +89,6 @@ a plane. Optionally, it also plots the outline of the horizons."""
         ignore_symlinks=args.ignore_symlinks,
         pickle_file=args.pickle_file,
     ) as sim:
-
         logger.debug("Prepared SimDir")
         sim_hor = sim.horizons
 
@@ -125,7 +123,6 @@ a plane. Optionally, it also plots the outline of the horizons."""
                 masses.append(hor.ah.m_irreducible)
 
         if args.force_com_at_origin:
-
             # x_cm = sum m_i / M x_i
 
             logger.debug("Computing center of mass")
@@ -158,7 +155,7 @@ a plane. Optionally, it also plots the outline of the horizons."""
                 )
                 # Now, we update ah_coords over that coordinate by subtracting
                 # the center of mass from each apparent horizon
-                ah_coords[coord] = [ah - com for ah in ah_coords[coord]]
+                ah_coord = [ah - com for ah in ah_coords[coord]]
 
         to_plot_x, to_plot_y = args.plane
         logger.debug(f"Plotting on the x axis {to_plot_x}")
@@ -194,7 +191,7 @@ a plane. Optionally, it also plots the outline of the horizons."""
         plt.gca().set_aspect("equal")
 
         plt.legend()
-        add_text_to_corner(fr"$t = {time:.3f}$")
+        add_text_to_corner(rf"$t = {time:.3f}$")
 
         logger.debug("Saving")
         save_from_dir_filename_ext(

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-# Copyright (C) 2020-2022 Gabriele Bozzola
+# Copyright (C) 2020-2023 Gabriele Bozzola
 #
 # This program is free software; you can redistribute it and/or modify it under
 # the terms of the GNU General Public License as published by the Free Software
@@ -204,6 +204,12 @@ def add_figure_to_parser(parser, default_figname=None, add_limits=False):
         default="png",
         env_var="KBIT_FIG_EXTENSION",
         help="Extension of the output figure (default: %(default)s).",
+    )
+    parser.add_argument(
+        "--mpl-rc-file",
+        type=str,
+        env_var="KBIT_MPL_RC_FILE",
+        help="Configuration file for matplotlib.",
     )
     parser.add_argument(
         "--tikz-clean-figure",

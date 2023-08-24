@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-# Copyright (C) 2020-2022 Gabriele Bozzola
+# Copyright (C) 2020-2023 Gabriele Bozzola
 #
 # Based on by code originally developed by Wolfgang Kastaun. This file may
 # contain algorithms and/or structures first implemented in
@@ -222,6 +222,7 @@ class TimeSeries(BaseSeries):
 
     # NOTE: Are you adding a function? Document it in timeseries.rst!
 
+    # skiqc PYL-W0235
     def __init__(self, t, y, guarantee_t_is_monotonic=False):
         """Constructor.
 

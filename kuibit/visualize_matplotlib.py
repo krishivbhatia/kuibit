@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-# Copyright (C) 2020-2022 Gabriele Bozzola
+# Copyright (C) 2020-2023 Gabriele Bozzola
 #
 # Inspired by code originally developed by Wolfgang Kastaun. This file may
 # contain algorithms and/or structures first implemented in
@@ -70,6 +70,7 @@ can specify them, or the current ones will be used.
 import itertools
 import os
 import warnings
+from typing import Any, Dict, Optional
 
 import matplotlib
 import matplotlib.pyplot as plt
@@ -85,11 +86,17 @@ from kuibit.cactus_grid_functions import BaseOneGridFunction
 # UTILITIES
 
 
-def setup_matplotlib(params=None):
+def setup_matplotlib(
+    params: Optional[Dict[str, Any]] = None, rc_par_file: str = None
+) -> None:
     """Setup matplotlib with some reasonable defaults for better plots.
 
     If ``params`` is provided, add these parameters to matplotlib's settings
     (``params`` updates ``matplotlib.rcParams``).
+
+    If ``rc_par_file`` is provided, first set the parameters reading the values
+    from the ``rc_par_file``. (``params`` has the precedence over the parameters
+    read from the file.)
 
     Matplotlib behaves differently on different machines. With this, we make
     sure that we set all the relevant paramters that we care of to the value we
@@ -97,6 +104,12 @@ def setup_matplotlib(params=None):
 
     :param params: Parameters to update matplotlib with.
     :type params: dict
+
+    :param rc_par_file: File where to read parameters. The file has to use
+                        matplotlib's configuration language. ``params``
+                        overwrites the values set from this file, but this file
+                        overrides the default values set in this function.
+    :type rc_par_file: str
 
     """
 
@@ -117,6 +130,9 @@ def setup_matplotlib(params=None):
             "legend.edgecolor": "inherit",
         }
     )
+
+    if rc_par_file is not None:
+        matplotlib.rc_file(rc_par_file)
 
     if params is not None:
         matplotlib.rcParams.update(params)
@@ -417,7 +433,6 @@ def save(
 
     """
     if os.path.splitext(outputpath)[-1] == ".tikz":
-
         # If clean_figure is True, we extract from kwargs those argument
         # that tikzplotlib.clean_figure would take. For this, we need to
         # know what argument that function takes.
@@ -1093,7 +1108,6 @@ def plot_components_boundaries(
         kwargs["edgecolor"] = "black"
 
     for _1, _2, comp in hierarchical_data:
-
         # grid is the UniformGrid of the component under consideration with or
         # without ghost zones depending on the value of remove_ghosts
         grid = comp.grid.ghost_zones_removed() if remove_ghosts else comp.grid
@@ -1194,7 +1208,7 @@ def _plot_horizon_on_plane(
         "yz": (0, None, None),
     }
 
-    if plane not in cut.keys():
+    if plane not in cut:
         raise ValueError(f"Plane has to be one of {list(cut.keys())}")
 
     if plot_type == "iteration":

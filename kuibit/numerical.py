@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-# Copyright (C) 2020-2022 Gabriele Bozzola
+# Copyright (C) 2020-2023 Gabriele Bozzola
 #
 # This program is free software; you can redistribute it and/or modify it under
 # the terms of the GNU General Public License as published by the Free Software
@@ -45,6 +45,9 @@ class BaseNumerical(ABC):
        that returns function(self, other, *args, **kwargs)
     - _apply_reduction(self, function, *args, **kwargs)
        that returns function(self, *args, **kwargs)
+    - _apply_to_self(self, function, *args, **kwargs)
+       that returns applies function(self, *args, **kwargs)
+       and modifies self.
 
     """
 
@@ -58,6 +61,10 @@ class BaseNumerical(ABC):
 
     @abstractmethod
     def _apply_reduction(self, reduction, *args, **kwargs):
+        raise NotImplementedError
+
+    @abstractmethod
+    def _apply_to_self(self, function, *args, **kwargs):
         raise NotImplementedError
 
     def __add__(self, other):
@@ -103,7 +110,7 @@ class BaseNumerical(ABC):
         return self / other
 
     def __ipow__(self, other):
-        return self ** other
+        return self**other
 
     def __neg__(self):
         return self._apply_unary(np.negative)
@@ -116,6 +123,17 @@ class BaseNumerical(ABC):
 
     def max(self):
         return self._apply_reduction(np.max)
+
+    def mean(self):
+        return self._apply_reduction(np.mean)
+
+    average = mean
+
+    def median(self):
+        return self._apply_reduction(np.median)
+
+    def std(self):
+        return self._apply_reduction(np.std)
 
     def nanmin(self):
         return self._apply_reduction(np.nanmin)

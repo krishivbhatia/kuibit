@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # PYTHON_ARGCOMPLETE_OK
 
-# Copyright (C) 2021-2022 Gabriele Bozzola
+# Copyright (C) 2021-2023 Gabriele Bozzola
 #
 # This program is free software; you can redistribute it and/or modify it under
 # the terms of the GNU General Public License as published by the Free Software
@@ -31,8 +31,6 @@ from kuibit.visualize_matplotlib import (
 )
 
 if __name__ == "__main__":
-    setup_matplotlib()
-
     desc = f"""\
 {kah.get_program_name()} plots the gravitational-wave luminosity and cumulative
 energy as a function of time for a given detector. """
@@ -57,6 +55,7 @@ energy as a function of time for a given detector. """
     )
 
     args = kah.get_args(parser)
+    setup_matplotlib(rc_par_file=args.mpl_rc_file)
 
     logger = logging.getLogger(__name__)
 
@@ -72,7 +71,6 @@ energy as a function of time for a given detector. """
         ignore_symlinks=args.ignore_symlinks,
         pickle_file=args.pickle_file,
     ) as sim:
-
         logger.debug("Prepared SimDir")
 
         radius = sim.gravitationalwaves.radii[args.detector_num]
@@ -100,7 +98,7 @@ energy as a function of time for a given detector. """
         add_text_to_corner(
             f"Det {args.detector_num}", anchor="SW", offset=0.005
         )
-        add_text_to_corner(fr"$r = {radius:.3f}$", anchor="NE", offset=0.005)
+        add_text_to_corner(rf"$r = {radius:.3f}$", anchor="NE", offset=0.005)
 
         set_axis_limits_from_args(args)
         logger.debug("Plotted")

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-# Copyright (C) 2020-2022 Gabriele Bozzola
+# Copyright (C) 2020-2023 Gabriele Bozzola
 #
 # This program is free software; you can redistribute it and/or modify it under
 # the terms of the GNU General Public License as published by the Free Software
@@ -28,7 +28,6 @@ from kuibit import grid_data_utils as gdu
 
 class TestGridDataUtils(unittest.TestCase):
     def test_common_bounding_box(self):
-
         # Test error for not passing a list
         with self.assertRaises(TypeError):
             gdu.common_bounding_box(1)
@@ -71,7 +70,6 @@ class TestGridDataUtils(unittest.TestCase):
         )
 
     def test_merge_uniform_grids(self):
-
         # Test error for not passing a list
         with self.assertRaises(TypeError):
             gdu.merge_uniform_grids(1)
@@ -89,7 +87,9 @@ class TestGridDataUtils(unittest.TestCase):
         with self.assertRaises(ValueError):
             gdu.merge_uniform_grids([geom1, geom2])
 
-        geom3 = gd.UniformGrid([101, 101], x0=[1, 1], x1=[10, 5], ref_level=1)
+        geom3 = gd.UniformGrid(
+            [101, 101], x0=[1, 1], x1=[10, 5], ref_level=1, time=5
+        )
 
         # Different dx
         with self.assertRaises(ValueError):
@@ -143,7 +143,6 @@ class TestGridDataUtils(unittest.TestCase):
         )
 
     def test_sample_function(self):
-
         # Test not grid as input
         with self.assertRaises(TypeError):
             gdu.sample_function_from_uniformgrid(np.sin, 0)

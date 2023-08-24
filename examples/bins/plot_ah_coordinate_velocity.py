@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # PYTHON_ARGCOMPLETE_OK
 
-# Copyright (C) 2021-2022 Gabriele Bozzola
+# Copyright (C) 2021-2023 Gabriele Bozzola
 #
 # This program is free software; you can redistribute it and/or modify it under
 # the terms of the GNU General Public License as published by the Free Software
@@ -22,6 +22,7 @@ import matplotlib.pyplot as plt
 
 from kuibit import argparse_helper as kah
 from kuibit.simdir import SimDir
+from kuibit.tensor import Vector
 from kuibit.visualize_matplotlib import (
     add_text_to_corner,
     get_figname,
@@ -31,8 +32,6 @@ from kuibit.visualize_matplotlib import (
 )
 
 if __name__ == "__main__":
-    setup_matplotlib()
-
     desc = f"""{kah.get_program_name()} plots the coordinate velocity of a
 given apparent horizon as a function of time."""
 
@@ -48,6 +47,7 @@ given apparent horizon as a function of time."""
     )
 
     args = kah.get_args(parser)
+    setup_matplotlib(rc_par_file=args.mpl_rc_file)
 
     # Parse arguments
 
@@ -66,7 +66,6 @@ given apparent horizon as a function of time."""
         ignore_symlinks=args.ignore_symlinks,
         pickle_file=args.pickle_file,
     ) as sim:
-
         logger.debug("Prepared SimDir")
         sim_hor = sim.horizons
 
@@ -82,22 +81,17 @@ given apparent horizon as a function of time."""
 
         hor = sim_hor.get_apparent_horizon(ah).ah
 
-        cen_x, cen_y, cen_z = hor.centroid_x, hor.centroid_y, hor.centroid_z
-        vel_x, vel_y, vel_z = (
-            cen_x.differentiated(),
-            cen_y.differentiated(),
-            cen_z.differentiated(),
-        )
-        vel = (vel_x * vel_x + vel_y * vel_y + vel_z * vel_z).sqrt()
+        cen = Vector([hor.centroid_x, hor.centroid_y, hor.centroid_z])
+        vel = cen.differentiated()
 
         # Plot
         logger.debug("Plotting")
         plt.ylabel(f"Coordinate velocity of horizon {ah}")
         plt.xlabel("Time")
-        plt.plot(vel_x, label=r"$v^x$")
-        plt.plot(vel_y, label=r"$v^y$")
-        plt.plot(vel_z, label=r"$v^z$")
-        plt.plot(vel, label=r"$\|v\|$")
+        plt.plot(vel[0], label=r"$v^x$")
+        plt.plot(vel[1], label=r"$v^y$")
+        plt.plot(vel[2], label=r"$v^z$")
+        plt.plot(vel.norm(), label=r"$\|v\|$")
         plt.legend()
 
         add_text_to_corner(f"AH {ah}", anchor="SW", offset=0.005)

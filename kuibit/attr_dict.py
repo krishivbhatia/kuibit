@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-# Copyright (C) 2020-2022 Gabriele Bozzola
+# Copyright (C) 2020-2023 Gabriele Bozzola
 #
 # Based on code originally developed by Wolfgang Kastaun. This file may contain
 # algorithms and/or structures first implemented in
@@ -151,7 +151,6 @@ class TransformDictionary:
     """
 
     def __init__(self, elem, transform=lambda x: x):
-
         if not hasattr(elem, "items"):
             raise TypeError("Input is not dictionary-like")
 
@@ -177,7 +176,7 @@ class TransformDictionary:
     def keys(self):
         """Return the list of the available elements"""
         # Like normal dictionaries
-        return list(self._elem.keys())
+        return self._elem.keys()
 
     def __contains__(self, name):
         """This allows to use the 'in' keyword."""

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # PYTHON_ARGCOMPLETE_OK
 
-# Copyright (C) 2020-2022 Gabriele Bozzola
+# Copyright (C) 2020-2023 Gabriele Bozzola
 #
 # This program is free software; you can redistribute it and/or modify it under
 # the terms of the GNU General Public License as published by the Free Software
@@ -31,8 +31,6 @@ from kuibit.visualize_matplotlib import (
 )
 
 if __name__ == "__main__":
-    setup_matplotlib()
-
     desc = f"""\
 {kah.get_program_name()} plots the (l,m) gravitational-wave strain. Optionally,
 a window function can be applied to the data before performing the integration.
@@ -77,6 +75,7 @@ the order as they appear in the TimeSeries method."""
     )
 
     args = kah.get_args(parser)
+    setup_matplotlib(rc_par_file=args.mpl_rc_file)
 
     # Parse arguments
 
@@ -97,7 +96,6 @@ the order as they appear in the TimeSeries method."""
         ignore_symlinks=args.ignore_symlinks,
         pickle_file=args.pickle_file,
     ) as sim:
-
         logger.debug("Prepared SimDir")
         reader = sim.gravitationalwaves
 
@@ -130,21 +128,21 @@ the order as they appear in the TimeSeries method."""
 
         plt.plot(
             strain.real(),
-            label=fr"$r_{{\mathrm{{ex}}}} h^{{{args.mult_l}{args.mult_m}}}_+$",
+            label=rf"$r_{{\mathrm{{ex}}}} h^{{{args.mult_l}{args.mult_m}}}_+$",
         )
         plt.plot(
             -strain.imag(),
-            label=fr"$r_{{\mathrm{{ex}}}} h^{{{args.mult_l}{args.mult_m}}}_\times$",
+            label=rf"$r_{{\mathrm{{ex}}}} h^{{{args.mult_l}{args.mult_m}}}_\times$",
         )
 
         plt.legend()
         plt.xlabel("Time")
-        plt.ylabel(fr"$r_{{\mathrm{{ex}}}} h^{{{args.mult_l}{args.mult_l}}}$")
+        plt.ylabel(rf"$r_{{\mathrm{{ex}}}} h^{{{args.mult_l}{args.mult_l}}}$")
 
         add_text_to_corner(
             f"Det {args.detector_num}", anchor="SW", offset=0.005
         )
-        add_text_to_corner(fr"$r = {radius:.3f}$", anchor="NE", offset=0.005)
+        add_text_to_corner(rf"$r = {radius:.3f}$", anchor="NE", offset=0.005)
 
         set_axis_limits_from_args(args)
         logger.debug("Plotted")

@@ -1,6 +1,6 @@
 name: Document
 
-on: [push]
+on: [push, pull_request]
 
 jobs:
 
@@ -9,14 +9,14 @@ jobs:
         ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
         with:
           fetch-depth: 1
 
-      - name: Set up Python 3.6
-        uses: actions/setup-python@v2
+      - name: Set up Python 3.8
+        uses: actions/setup-python@v4
         with:
-          python-version: 3.6
+          python-version: 3.8
 
       - name: Install Poetry
         uses: snok/install-poetry@v1
@@ -25,7 +25,7 @@ jobs:
           virtualenvs-in-project: true
 
       - name: Load cached Poetry virtualenv
-        uses: actions/cache@v2
+        uses: actions/cache@v3
         id: cached-poetry-dependencies
         with:
           path: .venv
@@ -37,15 +37,17 @@ jobs:
         if: steps.cached-poetry-dependencies.outputs.cache-hit != 'true'
 
       - name: Produce documentation
+        env:
+            ADS_API: ${{ secrets.ADS_API }}
         run: |
           sudo apt-get update
           sudo apt-get install -y pandoc
-          sudo apt-get install -y xvfb
           cd docs/
-          xvfb-run poetry run make html
+          poetry run make html
           cd ..
 
       - name: Commit documentation changes
+        if: github.event_name != 'pull_request'
         run: |
           git clone https://github.com/sbozzolo/kuibit.git --branch gh-pages --single-branch gh-pages
           mkdir -p gh-pages/dev

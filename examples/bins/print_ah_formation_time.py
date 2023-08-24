@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # PYTHON_ARGCOMPLETE_OK
 
-# Copyright (C) 2021-2022 Gabriele Bozzola
+# Copyright (C) 2021-2023 Gabriele Bozzola
 #
 # This program is free software; you can redistribute it and/or modify it under
 # the terms of the GNU General Public License as published by the Free Software
@@ -22,7 +22,6 @@ from kuibit import argparse_helper as kah
 from kuibit.simdir import SimDir
 
 if __name__ == "__main__":
-
     desc = f"""{kah.get_program_name()} prints the time at which the given horizon
     was first found."""
 
@@ -57,7 +56,6 @@ if __name__ == "__main__":
         ignore_symlinks=args.ignore_symlinks,
         pickle_file=args.pickle_file,
     ) as sim:
-
         sim_hor = sim.horizons
 
         logger.debug(

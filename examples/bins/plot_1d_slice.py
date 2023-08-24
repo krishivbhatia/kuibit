@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # PYTHON_ARGCOMPLETE_OK
 
-# Copyright (C) 2021-2022 Gabriele Bozzola
+# Copyright (C) 2021-2023 Gabriele Bozzola
 #
 # This program is free software; you can redistribute it and/or modify it under
 # the terms of the GNU General Public License as published by the Free Software
@@ -30,8 +30,6 @@ from kuibit.visualize_matplotlib import (
 )
 
 if __name__ == "__main__":
-    setup_matplotlib()
-
     desc = """\
 {kah.get_program_name()} plots a grid function on one of the coordinate axis. 1D
 data is used if available, otherwise higher dimensional data is used."""
@@ -76,6 +74,7 @@ data is used if available, otherwise higher dimensional data is used."""
         help="Axis to plot (default: %(default)s)",
     )
     args = kah.get_args(parser)
+    setup_matplotlib(rc_par_file=args.mpl_rc_file)
 
     iteration, var_name, axis = args.iteration, args.variable, args.axis
 
@@ -194,10 +193,10 @@ data is used if available, otherwise higher dimensional data is used."""
 
             # Here we just have to read the data
 
-            var_1D = sim.gridfunctions[axis][var_name]
+            var = sim.gridfunctions[axis][var_name]
 
             if iteration == -1:
-                iteration = var_1D.available_iterations[-1]
+                iteration = var.available_iterations[-1]
 
             time = var.time_at_iteration(iteration)
 
@@ -235,7 +234,7 @@ data is used if available, otherwise higher dimensional data is used."""
 
         plt.plot(data, label=label)
 
-        add_text_to_corner(fr"$t = {time:.3f}$")
+        add_text_to_corner(rf"$t = {time:.3f}$")
 
         plt.xlabel(axis)
         plt.ylabel(label)

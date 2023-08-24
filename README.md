@@ -41,7 +41,10 @@ pip3 install kuibit
 ```
 If they are not already available, `pip` will install all the necessary dependencies.
 
-The minimum version of Python required is 3.6.1.
+``kuibit`` follows
+[NEP29](https://numpy.org/neps/nep-0029-deprecation_policy.html) and requires
+Python >= 3.7.
+
 
 If you intend to develop ``kuibit``, see [CONTRIBUTING.md](CONTRIBUTING.md) and
 follow the instruction below.
@@ -102,9 +105,12 @@ compiling the documentation will fail.
 ## Videos
 
 Here is a list of videos describing `kuibit` and how to use it:
+- [Tutorial: Post-processing Cactus simulations with Python](https://youtu.be/14YOQ6SqTUU)
 - [Introduction on kuibit - Einstein Toolkit Seminar, 2021](https://www.youtube.com/watch?v=7-F2xh-m31A)
 - [Using kuibit](https://www.youtube.com/playlist?list=PLIVVtc6RlFxpi3BiF6KTWd3z4TTQ5hY06)
 - [kuibit - Einstein Toolkit Summer School, 2021](https://youtu.be/g-JlXfLvUZU)
+- [Tutorial: Post-processing Cactus simulations with Python - Einstein Toolkit
+  Summer School, 2022](https://www.youtube.com/watch?v=14YOQ6SqTUU)
 
 The [Using
 kuibit](https://www.youtube.com/playlist?list=PLIVVtc6RlFxpi3BiF6KTWd3z4TTQ5hY06)

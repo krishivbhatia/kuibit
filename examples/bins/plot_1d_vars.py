@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # PYTHON_ARGCOMPLETE_OK
 
-# Copyright (C) 2020-2022 Gabriele Bozzola
+# Copyright (C) 2020-2023 Gabriele Bozzola
 #
 # This program is free software; you can redistribute it and/or modify it under
 # the terms of the GNU General Public License as published by the Free Software
@@ -31,8 +31,6 @@ from kuibit.visualize_matplotlib import (
 )
 
 if __name__ == "__main__":
-    setup_matplotlib()
-
     desc = f"""\
 {kah.get_program_name()} plots or more 1D grid functions output by Carpet."""
 
@@ -68,6 +66,7 @@ if __name__ == "__main__":
         help="Axis to plot (default: %(default)s).",
     )
     args = kah.get_args(parser)
+    setup_matplotlib(rc_par_file=args.mpl_rc_file)
 
     iteration = args.iteration
 
@@ -94,7 +93,6 @@ if __name__ == "__main__":
                 raise ValueError(f"{var} is not available")
 
         for variable in args.variables:
-
             logger.debug(f"Reading variable {variable}")
             logger.debug(f"Variables available {reader}")
             var = reader[variable]
@@ -115,7 +113,7 @@ if __name__ == "__main__":
                 variable_name = variable
 
             logger.debug("Merging refinement levels")
-            data = data.merge_refinement_levels().to_GridSeries()
+            data = data.refinement_levels_merged().to_GridSeries()
 
             if args.logscale:
                 label = f"log10({variable_name})"
@@ -130,7 +128,7 @@ if __name__ == "__main__":
             set_axis_limits_from_args(args)
             logger.debug("Plotted")
 
-        add_text_to_corner(fr"$t = {time:.3f}$")
+        add_text_to_corner(rf"$t = {time:.3f}$")
 
         plt.legend()
         plt.xlabel(args.axis)

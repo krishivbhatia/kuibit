@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-# Copyright (C) 2020-2022 Gabriele Bozzola
+# Copyright (C) 2020-2023 Gabriele Bozzola
 #
 # This program is free software; you can redistribute it and/or modify it under
 # the terms of the GNU General Public License as published by the Free Software
@@ -39,7 +39,6 @@ class TestGWMismatch(unittest.TestCase):
         self.ts2 = ts.TimeSeries(self.times, self.values2)
 
     def test_mismatch_from_strains(self):
-
         # Test with PyCBC.
         fmin = 10
         fmax = 15
@@ -237,7 +236,6 @@ class TestGWMismatch(unittest.TestCase):
             )
 
     def test_mismatch(self):
-
         fmin = 5
         fmax = 15
 
@@ -422,7 +420,6 @@ class TestGWMismatch(unittest.TestCase):
             pass
 
     def test_mismatch_from_psi4(self):
-
         fmin = 5
         fmax = 15
 
@@ -560,10 +557,10 @@ class TestGWMismatch(unittest.TestCase):
         )
 
     def test_mismatch_without_numba_installed(self):
-
         # We remove "njit" for the loaded module, so gwm thinks that numba is
         # not available
-        del gwm.__dict__["njit"]
+        if "njit" in gwm.__dict__:
+            del gwm.__dict__["njit"]
 
         fmin = 10
         fmax = 15

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # PYTHON_ARGCOMPLETE_OK
 
-# Copyright (C) 2020-2022 Gabriele Bozzola
+# Copyright (C) 2020-2023 Gabriele Bozzola
 #
 # This program is free software; you can redistribute it and/or modify it under
 # the terms of the GNU General Public License as published by the Free Software
@@ -36,8 +36,6 @@ from kuibit.visualize_matplotlib import (
 #       well.
 
 if __name__ == "__main__":
-    setup_matplotlib()
-
     desc = f"""\
 {kah.get_program_name()} plot a given grid function.
 
@@ -110,6 +108,7 @@ This is much faster but it is not as accurate."""
         help="Whether to take the absolute value.",
     )
     args = kah.get_args(parser)
+    setup_matplotlib(rc_par_file=args.mpl_rc_file)
 
     # Parse arguments
 
@@ -131,7 +130,6 @@ This is much faster but it is not as accurate."""
         ignore_symlinks=args.ignore_symlinks,
         pickle_file=args.pickle_file,
     ) as sim:
-
         logger.debug("Prepared SimDir")
         reader = sim.gridfunctions[args.plane]
         logger.debug(f"Variables available {reader}")
@@ -180,7 +178,7 @@ This is much faster but it is not as accurate."""
             interpolation=args.interpolation_method,
         )
 
-        add_text_to_corner(fr"$t = {time:.3f}$")
+        add_text_to_corner(rf"$t = {time:.3f}$")
 
         if args.ah_show:
             for ah in sim.horizons.available_apparent_horizons:

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-# Copyright (C) 2020-2022 Gabriele Bozzola
+# Copyright (C) 2020-2023 Gabriele Bozzola
 #
 # Based on code originally developed by Wolfgang Kastaun. This file may contain
 # algorithms and/or structures first implemented in
@@ -40,7 +40,6 @@ The function :py:func:`~.load_SimDir` can be used to load a :py:class:`~.SimDir`
 saved with the method :py:meth:`~.save`.
 
 """
-
 import os
 import pickle
 
@@ -49,6 +48,8 @@ from kuibit import (
     cactus_horizons,
     cactus_multipoles,
     cactus_scalars,
+    cactus_timers,
+    cactus_twopunctures,
     cactus_waves,
 )
 
@@ -130,6 +131,10 @@ class SimDir:
                           :py:class:`~.ElectromagneticWavesDir`.
     :ivar horizons:       Apparent horizon information, see
                           :py:class:`~.HorizonsDir`.
+    :ivar timers:         Timer information, see
+                          :py:class:`~.TimersDir`.
+    :ivar twopunctures:   Metadata information from TwoPunctures.
+                          :py:class:`~.TwoPuncturesDir`.
     :ivar multipoles:     Multipole components, see
                           :py:class:`~.CactusMultipoleDir`.
 
@@ -274,6 +279,8 @@ class SimDir:
         self.__electromagneticwaves = None
         self.__gridfunctions = None
         self.__horizons = None
+        self.__timers = None
+        self.__twopunctures = None
 
         if (pickle_file is None) or (not os.path.exists(pickle_file)):
             self._populate()
@@ -297,6 +304,8 @@ class SimDir:
         self.__electromagneticwaves = None
         self.__gridfunctions = None
         self.__horizons = None
+        self.__timers = None
+        self.__twopunctures = None
 
     def rescan(self):
         """Reset the SimDir and rescan all the files."""
@@ -380,6 +389,28 @@ class SimDir:
             self.__horizons = cactus_horizons.HorizonsDir(self)
         return self.__horizons
 
+    @property
+    def timers(self) -> cactus_timers.TimersDir:
+        """Return all the available timertree data.
+
+        :returns: Interface to all the timertree data in the directory.
+        :rtype: :py:class:`~.TimertreeDir`
+        """
+        if self.__timers is None:
+            self.__timers = cactus_timers.TimersDir(self)
+        return self.__timers
+
+    @property
+    def twopunctures(self):
+        """Return the metadata for TwoPunctures.
+
+        :returns: Interface to the metadata in TwoPunctures.
+        :rtype: :py:class:`~.TwoPuncturesDir`
+        """
+        if self.__twopunctures is None:
+            self.__twopunctures = cactus_twopunctures.TwoPuncturesDir(self)
+        return self.__twopunctures
+
     def __str__(self):
         header = f"Indexed {len(self.allfiles)} files"
         header += f" and {len(self.dirs)} subdirectories\n"
@@ -400,7 +431,18 @@ class SimDir:
 
         hor_ret = f"{self.horizons}"
 
-        return header + ts_ret + mp_ret + gw_ret + em_ret + gf_ret + hor_ret
+        tim_ret = f"\n{self.timers}"
+
+        return (
+            header
+            + ts_ret
+            + mp_ret
+            + gw_ret
+            + em_ret
+            + gf_ret
+            + hor_ret
+            + tim_ret
+        )
 
     def __enter__(self):
         """This is classed when the object is used as a context manager."""

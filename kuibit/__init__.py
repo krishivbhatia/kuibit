@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-# Copyright (C) 2020-2022 Gabriele Bozzola
+# Copyright (C) 2020-2023 Gabriele Bozzola
 #
 # This program is free software; you can redistribute it and/or modify it under
 # the terms of the GNU General Public License as published by the Free Software
@@ -20,7 +20,10 @@ Einstein Toolkit (or any Cactus-based code).
 
 """
 
-__version__ = "1.3.6"
+# skipcq: PY-W2000
+from kuibit.simdir import SimDir  # noqa: 401
+
+__version__ = "1.4.0"
 
 __bibtex__ = """\
 @article{kuibit,

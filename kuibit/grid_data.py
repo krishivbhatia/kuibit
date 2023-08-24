@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-# Copyright (C) 2020-2022 Gabriele Bozzola
+# Copyright (C) 2020-2023 Gabriele Bozzola
 #
 # Inspired by code originally developed by Wolfgang Kastaun. This file may
 # contain algorithms and/or structures first implemented in
@@ -39,9 +39,12 @@ reason this is useful is that ``Series`` are much simpler and leaner to work
 with.
 
 """
+from __future__ import annotations
+
 import warnings
 from bisect import bisect_right
 from os.path import splitext
+from typing import Iterable, Optional
 
 import numpy as np
 from scipy import interpolate, linalg
@@ -49,6 +52,7 @@ from scipy import interpolate, linalg
 from kuibit import grid_data_utils as gdu
 from kuibit.numerical import BaseNumerical
 from kuibit.series import BaseSeries
+from kuibit.tensor import Tensor
 from kuibit.uniform_grid import UniformGrid
 
 
@@ -468,7 +472,7 @@ class UniformGridData(BaseNumerical):
 
         # Our grid is cell-centered, so it is perfecly valid to evaluate a point
         # that it is outside coords, as long as it is within 0.5 * dx. For
-        # example, if the grid is linear from 0 to 10 with dx = 1, the pint
+        # example, if the grid is linear from 0 to 10 with dx = 1, the point
         # -0.25 is in the grid. To account for this in splines (to avoid that
         # they throw an error), we add another point at the two boundaries. This
         # point as the same value as the last point (which is equivalent to a
@@ -629,7 +633,6 @@ class UniformGridData(BaseNumerical):
         if piecewise_constant or (
             self.num_dimensions != self.num_extended_dimensions
         ):
-
             ret = self._nearest_neighbor_interpolation(x_arr, ext=ext)
 
         else:
@@ -953,10 +956,7 @@ class UniformGridData(BaseNumerical):
         new_grid = self.grid.ghost_zones_removed()
         # We remove the borders from the data using the slicing operator
         slicer = tuple(
-            [
-                slice(ghost_zones, -ghost_zones)
-                for ghost_zones in self.num_ghost
-            ]
+            slice(ghost_zones, -ghost_zones) for ghost_zones in self.num_ghost
         )
         new_data = self.data[slicer]
         return type(self)(new_grid, new_data)
@@ -965,8 +965,15 @@ class UniformGridData(BaseNumerical):
         """Remove all the ghost zones."""
         self._apply_to_self(self.ghost_zones_removed)
 
-    def reflection_symmetry_undone(self, dimension, parity=1):
-        """Return a new UniformGridData with reflection symmetry undo for the given dimension.
+    def _roto_reflection_symmetry_undone(
+        self,
+        dimension: int,
+        parity: int = 1,
+        second_reflect_dimension: Optional[int] = None,
+    ) -> UniformGridData:
+        """Core routine to undo reflections and rotations.
+
+        Undo a reflection about the given dimension.
 
         The parameter ``parity`` determines how to fill the data.
 
@@ -976,23 +983,78 @@ class UniformGridData(BaseNumerical):
         We assume that the reflection will always be from the positive side to
         the negative. Pre-existing data in the negative side will be overwritten.
 
-        This will change the shape of the object.
+        Under certain conditions (which are always met in simulations with
+        Carpet), undoing a rotation180 symmetry is the same as undoing a
+        reflection symmetry combined with reversing the new data along the other
+        dimension involved in the rotation.
 
-        :param dimension: Dimension that has to be reflected.
-        :type dimension: int
+        Consider the pictorial representation of a grid:
 
-        :param parity: Fill the data assuming that the function is even (parity = 1),
-                       or odd (parity = -1).
-        :type parity: 1 or -1
+                 y
+                 |
+                 |    O
+                 |
+        ------------------- x
+                 |
+                 |
+                 |
 
-        :returns: New :py:class:`UniformGridData` with values explicitly set for
-                  reflected data.
-        :rtype: :py:class:`~.UniformGridData`
+        First, we perform a reflection along x, and we get
+
+                 y
+                 |
+            O    |    O
+                 |
+        ------------------- x
+                 |
+                 |
+                 |
+
+        Next, we reverse the newly copied data
+
+                 y
+                 |
+                 |    O
+                 |
+        ------------------- x
+                 |
+            O    |
+                 |
+
+
+        This is a rotation!
+
+        Note that this makes sense only if the grid is symmetric along the other
+        axes. So, what we have to do is reverse the array for the other axis in
+        the plane of rotation.
+
+        This is why there's a second parameter ``second_reflect_axis``. This is
+        a second reflection that occurs only in the part of data that has been
+        newly minted. For it to work, the grid has to be symmetric in this
+        direction.
+
+        :param dimension: Along which dimension to fill in the data
+        :type parity: int
+        :param parity: Multiplied the filled that with this value. Useful to
+                       change sign of vectors.
+        :type parity: int
+        :param second_reflect_dimension:
+        :type second_reflect_dimension: int
+
+        :returns: New :py:class:`UniformGridData` with data filled with points
+                  obtained by applying one reflection or two.
+        :rtype: :py:class:`UniformGridData`
 
         """
+        if parity not in (-1, 1):
+            raise ValueError(
+                f"Parity has to be either 1 or -1, cannot be {parity}"
+            )
 
-        # NOTE: this cannot be applied to HierarchicalGridData. In that case we would
-        # need to add new components all together.
+        if not (0 <= dimension < self.num_dimensions):
+            raise ValueError(
+                f"Dimension has to be between 0 and {self.num_dimensions} (it is {dimension})"
+            )
 
         # We assume that we are going to reflect from the positive side to the
         # negative
@@ -1001,10 +1063,16 @@ class UniformGridData(BaseNumerical):
         if self.x0[dimension] > 0:
             raise ValueError("Cannot reflect data that does not cross 0")
 
-        if parity not in (-1, 1):
-            raise ValueError(
-                f"Parity has to be either 1 or -1, cannot be {parity}"
-            )
+        if second_reflect_dimension is not None:
+            # The grid has to be symmetric if we reflect along a second dimension
+            if not np.isclose(
+                self.x0[second_reflect_dimension],
+                -self.x1[second_reflect_dimension],
+                atol=1e-14,
+            ):
+                raise RuntimeError(
+                    f"Grid is not symmetric in the {second_reflect_dimension} direction"
+                )
 
         # See self.grid.coordinates_to_indices():
         # We convert the coordinate 0.0 to the index, this will always overestimate, so
@@ -1044,7 +1112,7 @@ class UniformGridData(BaseNumerical):
             )
         ):
             raise ValueError(
-                f"Grid is not symmetric along dimension {dimension}"
+                f"Grid is not symmetric along reflection axis {dimension}"
             )
 
         num_elements_to_copy = (
@@ -1062,12 +1130,20 @@ class UniformGridData(BaseNumerical):
         # We overwrite it with the data
         new_data = np.zeros(new_shape, dtype=self.dtype)
 
-        # These are slicers that copy everything. This is what we want, except
-        # for the given dimension.
+        # First, we copy the new region
+
+        # The following are slicers that copy everything. This is what we want,
+        # except for the given dimension.
         destination = [slice(None, None) for _ in self.shape]
         source = [slice(None, None) for _ in self.shape]
         # Copy in indices 0, 1, ..., num_elements_to_copy - 1
         destination[dimension] = slice(0, num_elements_to_copy)
+
+        # If we have a second reflection to perform, we want the data to be
+        # reversed in this region
+        if second_reflect_dimension:
+            destination[second_reflect_dimension] = slice(None, None, -1)
+
         # We have to read the data backwards from the source, so we read from the end
         # to index_first_positive - 1 (not included)
         source[dimension] = slice(
@@ -1077,6 +1153,11 @@ class UniformGridData(BaseNumerical):
         )
 
         new_data[tuple(destination)] = parity * self.data[tuple(source)]
+
+        # If we have a second reflection, the data has to be the same for the
+        # old region, so we restore a copy slicer.
+        if second_reflect_dimension:
+            destination[second_reflect_dimension] = slice(None, None)
 
         # Now we copy the data we already had
         #
@@ -1107,6 +1188,135 @@ class UniformGridData(BaseNumerical):
         )
 
         return type(self)(new_grid, new_data)
+
+    def rotation180_symmetry_undone(
+        self,
+        dimension: int = 0,
+        plane: Iterable[int] = (0, 1),
+        parity: int = 1,
+    ) -> UniformGridData:
+        """Return a new UniformGridData with rotational 180 symmetry undone.
+
+        `dimension` identifies the region for which we only have half of the
+        data (in Carpet it is always going to be 0--the x axis). `plane`
+        specifies where we are performing the rotation (in Carpet it is always
+        (0, 1)--rotation about the z axis). `plane` is specified by providing a
+        tuple with the two dimensions involved in the rotation (one of the two has to be `dimension`).
+
+        This method works only if the data crosses the value 0 along the given
+        dimension, and if the coordinates are symmetric with respect to the
+        other dimension involved in the rotation.
+
+        We assume that the rotation will always be from the positive side to
+        the negative. Pre-existing data in the negative side will be overwritten.
+
+        This will change the shape of the object.
+
+        :param dimension: Dimension about which to fill in missing data
+        :type dimension: int
+        :param plane: Plane on which the rotation occurs specified by specifying
+                      the two dimensions involved in the rotation.
+        :type plane: tuple of ints
+        :param parity: Fill the data assuming that the function is even (parity = 1),
+                       or odd (parity = -1).
+        :type parity: 1 or -1
+
+        """
+        if dimension not in plane:
+            raise ValueError(
+                "Rotation plane does not include dimension for which the symmetry has to be undone"
+            )
+
+        if len(plane) != 2:
+            raise ValueError(
+                "Rotation plane has to be identified by its two dimensions"
+            )
+
+        # We need to figure out what is the second axis involved in the rotation
+        # (in addition to `dimension`). So, we take the set difference between
+        # `set(plane)` and `{dimension}`, which returns a set with only one
+        # element. We use tuple unpacking to extract this element.
+        (second_reflect_dimension,) = set(plane) - {dimension}
+
+        return self._roto_reflection_symmetry_undone(
+            dimension,
+            parity=parity,
+            second_reflect_dimension=second_reflect_dimension,
+        )
+
+    def rotation180_symmetry_undo(
+        self,
+        dimension: int = 0,
+        plane: Iterable[int] = (0, 1),
+        parity: int = 1,
+    ) -> None:
+        """Undo rotational 180 symmetry on the given plane for given dimension.
+
+        `dimension` identifies the region for which we only have half of the
+        data (in Carpet it is always going to be 0--the x axis). `plane`
+        specifies where we are performing the rotation (in Carpet it is always
+        (0, 1)--rotation about the z axis). `plane` is specified by providing a
+        tuple with the two dimensions involved in the rotation (one of the two has to be `dimension`).
+
+        This method works only if the data crosses the value 0 along the given
+        dimension, and if the coordinates are symmetric with respect to the
+        other dimension involved in the rotation.
+
+        We assume that the rotation will always be from the positive side to
+        the negative. Pre-existing data in the negative side will be overwritten.
+
+        This will change the shape of the object.
+
+        :param dimension: Dimension about which to fill in missing data
+        :type dimension: int
+        :param plane: Plane on which the rotation occurs specified by specifying
+                      the two dimensions involved in the rotation.
+        :type plane: tuple of ints
+        :param parity: Fill the data assuming that the function is even (parity = 1),
+                       or odd (parity = -1).
+        :type parity: 1 or -1
+        """
+        self._apply_to_self(
+            self.rotation180_symmetry_undone,
+            dimension=dimension,
+            plane=plane,
+            parity=parity,
+        )
+
+    def reflection_symmetry_undone(
+        self, dimension: int, parity: int = 1
+    ) -> UniformGridData:
+        """Return a new UniformGridData with reflection symmetry undo for the given dimension.
+
+        The parameter ``parity`` determines how to fill the data.
+
+        This method works only if the data crosses the value 0 along the given
+        dimension.
+
+        We assume that the reflection will always be from the positive side to
+        the negative. Pre-existing data in the negative side will be overwritten.
+
+        This will change the shape of the object.
+
+        :param dimension: Dimension that has to be reflected.
+        :type dimension: int
+
+        :param parity: Fill the data assuming that the function is even (parity = 1),
+                       or odd (parity = -1).
+        :type parity: 1 or -1
+
+        :returns: New :py:class:`UniformGridData` with values explicitly set for
+                  reflected data.
+        :rtype: :py:class:`~.UniformGridData`
+
+        """
+
+        # NOTE: this cannot be applied to HierarchicalGridData. In that case we would
+        # need to add new components all together.
+
+        return self._roto_reflection_symmetry_undone(
+            dimension=dimension, parity=parity, second_reflect_dimension=None
+        )
 
     def reflection_symmetry_undo(self, dimension, parity=1):
         """Undo reflection symmetry for the given dimension.
@@ -1456,7 +1666,7 @@ class UniformGridData(BaseNumerical):
             self.mask_applied, mask, ignore_existing=ignore_existing
         )
 
-    def partial_differentiated(self, direction, order=1):
+    def partial_differentiated(self, direction, order=1, accuracy_order=2):
         """Return a :py:class:`~.UniformGridData` that is the numerical
         order-differentiation of the present grid_data along a given direction.
         (``order`` = number of derivatives, ie ``order=2`` is second derivative)
@@ -1471,6 +1681,8 @@ class UniformGridData(BaseNumerical):
         :type order: int
         :param direction: Direction of the partial derivative.
         :type direction: int
+        :param accuracy_order: Order of accuracy of the finite difference scheme.
+        :type accuracy_order: int
 
         :returns:  New :py:class:`~.UniformGridData` with derivative.
         :rtype:    :py:class:`~.UniformGridData`
@@ -1487,15 +1699,112 @@ class UniformGridData(BaseNumerical):
                 f"{direction} is not available"
             )
 
-        ret_value = self.data.copy()
-        for _num_deriv in range(order):
-
-            ret_value = np.gradient(
-                ret_value, self.dx[direction], axis=direction, edge_order=2
+        if self.shape[direction] < accuracy_order + 1:
+            raise ValueError(
+                f"Need at least {accuracy_order + 1} points for finite difference."
             )
+
+        ret_value = np.zeros_like(self.data)
+
+        def slicer(index0: int, index1: int) -> slice:
+            """Create a slicer objects between indices index0 and index1 along the direction
+            where the derivative is taken. Everything else is left untouched
+
+            """
+            slice_ = [slice(None) for _ in self.shape]
+            slice_[direction] = slice(index0, index1)
+            return tuple(slice_)
+
+        def slicer1(index0: int) -> slice:
+            """Create a slicer objects that isolated the given ``index0`` along the
+            direction of the derivative.
+
+            """
+            # If index0 is -1, we are considering the end of the list
+            index1 = index0 + 1 if index0 != -1 else None
+            return slicer(index0, index1)
+
+        dx = self.dx[direction]
+
+        # We will set data to _ret_value after we computed each oder
+        data = self.data
+
+        for _num_deriv in range(order):
+            if accuracy_order == 2:
+                # Bulk, equivalent to f[i] - f[i + i]) / 2 dx
+                ret_value[slicer(1, -1)] = (
+                    data[slicer(2, None)] - data[slicer(0, -2)]
+                ) / (2 * dx)
+                # Second order forward difference for first element
+                # -(3*y[0] - 4*y[1] + y[2]) / (2*dx)
+                ret_value[slicer1(0)] = -(
+                    3 * data[slicer1(0)]
+                    - 4 * data[slicer1(1)]
+                    + data[slicer1(2)]
+                ) / (2 * dx)
+                # Backwards difference final element
+                # (3*y[-1] - 4*y[-2] + y[-3]) / (2*dx)
+                ret_value[slicer1(-1)] = (
+                    3 * data[slicer1(-1)]
+                    - 4 * data[slicer1(-2)]
+                    + data[slicer1(-3)]
+                ) / (2 * dx)
+            elif accuracy_order == 4:
+                # Coefficients computed with
+                # https://web.media.mit.edu/~crtaylor/calculator.html
+
+                # Bulk, equivalent to (f[:4] - 8*f[1:-3] + 8*f[3:-1] - f[4:])/12.0
+                ret_value[slicer(2, -2)] = (
+                    data[slicer(None, -4)]
+                    - 8.0 * data[slicer(1, -3)]
+                    + 8.0 * data[slicer(3, -1)]
+                    - data[slicer(4, None)]
+                ) / (12.0 * dx)
+                # Fourth order partially forward difference for second element
+                # (-3*f[0]-10*f[1]+18*f[2]-6*f[3]+1*f[4])/(12 dx)
+                ret_value[slicer1(1)] = (
+                    -3 * data[slicer1(0)]
+                    - 10 * data[slicer1(1)]
+                    + 18 * data[slicer1(2)]
+                    - 6 * data[slicer1(3)]
+                    + 1 * data[slicer1(4)]
+                ) / (12 * dx)
+                # Fourth order fully forward difference for first element
+                # (-25*f[0]+48*f[1]-36*f[2]+16*f[3]-3*f[4])/(12dx)
+                ret_value[slicer1(0)] = (
+                    -25 * data[slicer1(0)]
+                    + 48 * data[slicer1(1)]
+                    - 36 * data[slicer1(2)]
+                    + 16 * data[slicer1(3)]
+                    - 3 * data[slicer1(4)]
+                ) / (12 * dx)
+                # Fourth order fully backward difference for last element
+                # (3*f[-5]-16*f[-4]+36*f[-3]-48*f[-2]+25*f[-1])/(12*dx)
+                ret_value[slicer1(-1)] = -(
+                    -25 * data[slicer1(-1)]
+                    + 48 * data[slicer1(-2)]
+                    - 36 * data[slicer1(-3)]
+                    + 16 * data[slicer1(-4)]
+                    - 3 * data[slicer1(-5)]
+                ) / (12 * dx)
+                # Fourth order partially backward difference for the second to last
+                # (-1*f[-4]+6*f[-3]-18*f[-3]+10*f[-2]+3*f[-1])/(12*dx)
+                ret_value[slicer1(-2)] = -(
+                    -3 * data[slicer1(-1)]
+                    - 10 * data[slicer1(-2)]
+                    + 18 * data[slicer1(-3)]
+                    - 6 * data[slicer1(-4)]
+                    + 1 * data[slicer1(-5)]
+                ) / (12 * dx)
+            else:
+                raise NotImplementedError(
+                    f"Accuracy order {accuracy_order} not implemented"
+                )
+
+            data = ret_value.copy()
         return type(self)(self.grid, ret_value)
 
-    def gradient(self, order=1):
+    def gradient(self, order=1, accuracy_order=2):
         """Return a list :py:class:`~.UniformGridData` that are the numerical
         order-differentiation of the present grid_data along all the directions.
         (``order`` = number of derivatives, ie ``order=2`` is second derivative)
@@ -1510,17 +1819,22 @@ class UniformGridData(BaseNumerical):
         :type order: int
         :param direction: Direction of the partial derivative.
         :type direction: int
+        :param accuracy_order: Order of accuracy of the finite difference scheme.
+        :type accuracy_order: int
+
         :returns:  list of :py:class:`~.UniformGridData` with partial derivative
                    along the directions.
         :rtype:    list of :py:class:`~.UniformGridData`
 
         """
         return [
-            self.partial_differentiated(direction, order=order)
+            self.partial_differentiated(
+                direction, order=order, accuracy_order=accuracy_order
+            )
             for direction in range(self.num_dimensions)
         ]
 
-    def partial_differentiate(self, dimension, order=1):
+    def partial_differentiate(self, dimension, order=1, accuracy_order=2):
         """Derive the data with numerical finite difference along a given direction
         (``order`` = number of derivatives, ie ``order=2`` is second derivative).
 
@@ -1534,10 +1848,15 @@ class UniformGridData(BaseNumerical):
         :type order: int
         :param direction: Direction of the partial derivative.
         :type direction: int
+        :param accuracy_order: Order of accuracy of the finite difference scheme.
+        :type accuracy_order: int
 
         """
         self._apply_to_self(
-            self.partial_differentiated, dimension, order=order
+            self.partial_differentiated,
+            dimension,
+            order=order,
+            accuracy_order=accuracy_order,
         )
 
     def _coordinates_at(self, where, absolute):
@@ -1649,6 +1968,17 @@ class UniformGridData(BaseNumerical):
                 self.grid, function(self.data, other, *args, **kwargs)
             )
 
+        # If it is a Tensor of type(self), we have to return a Tensor
+        if isinstance(other, Tensor) and type(self) is other.type:
+            # We keep this at the high level
+            return type(other).from_shape_and_flat_data(
+                other.shape,
+                [
+                    function(ot, self, *args, **kwargs)
+                    for ot in other.flat_data
+                ],
+            )
+
         # If we are here, it is because we cannot add the two objects
         raise TypeError("I don't know how to combine these objects")
 
@@ -1659,6 +1989,13 @@ class UniformGridData(BaseNumerical):
             np.ma.allclose(self.data, other.data, atol=1e-14)
             and self.grid == other.grid
         )
+
+    # From Python's docs: In order to conform to the object model, classes that
+    # define their own equality method should also define their own hash method,
+    # or be unhashable.
+
+    # We consider grid data unhashable, this object also has to be unhashable.
+    __hash__ = None
 
     def fourier_transform(self):
         """Perform the multi-dimensional Fourier transform on the data.
@@ -1812,7 +2149,6 @@ class HierarchicalGridData(BaseNumerical):
         # Next, we loop over all the components and check if their dx is an
         # integral multiple of dx_finest
         for comp in self.all_components:
-
             ref_level = comp.ref_level
             comp_ref_factor = comp.dx / self.finest_dx
 
@@ -2471,6 +2807,13 @@ class HierarchicalGridData(BaseNumerical):
 
         return self.all_components == other.all_components
 
+    # From Python's docs: In order to conform to the object model, classes that
+    # define their own equality method should also define their own hash method,
+    # or be unhashable.
+
+    # We consider grid data unhashable, this object also has to be unhashable.
+    __hash__ = None
+
     def _finest_component_at_point_mapping(self, coordinate):
         """Return the component of the most refined level that contains the given
         coordinate assuming a valid input coordinate using the component mapping.
@@ -2676,8 +3019,9 @@ class HierarchicalGridData(BaseNumerical):
 
         return self.to_UniformGridData_from_grid(grid, resample=resample)
 
-    def merge_refinement_levels(self, resample=False):
-        """Combine all the available data and resample it grid that encompasses all the
+    def refinement_levels_merged(self, resample=False):
+        """Return a new :py:class:`~.UniformGridData` with all the available
+        data combined and resampled to a grid that encompasses all the
         components and has resolution of the finest refinement level.
 
         When ``resample`` is True, data from coarser refinement levels is
@@ -2723,6 +3067,15 @@ class HierarchicalGridData(BaseNumerical):
             resample=resample,
         )
 
+    def merge_refinement_levels(self, resample=False):
+        """DEPRECATED."""
+        warnings.warn(
+            "merge_refinement_levels was renamed to refinement_levels_merged "
+            "and it will be removed in kuibit 1.5.0",
+            category=FutureWarning,
+        )
+        return self.refinement_levels_merged(resample=resample)
+
     def _apply_to_self(self, f, *args, **kwargs):
         """Apply the method ``f`` to ``self``, modifying ``self``.
         This is used to transform the commands from returning an object
@@ -2767,6 +3120,17 @@ class HierarchicalGridData(BaseNumerical):
                 for data_self in self.all_components
             ]
             return type(self)(new_data)
+
+        # If it is a Tensor of type(self), we have to return a Tensor
+        if isinstance(other, Tensor) and type(self) is other.type:
+            # We keep this at the high level
+            return type(other).from_shape_and_flat_data(
+                other.shape,
+                [
+                    function(ot, self, *args, **kwargs)
+                    for ot in other.flat_data
+                ],
+            )
 
         # If we are here, it is because we cannot add the two objects
         raise TypeError("I don't know how to combine these objects")
@@ -2871,7 +3235,7 @@ class HierarchicalGridData(BaseNumerical):
             for dim in range(self.num_dimensions)
         ]
 
-    def partial_differentiated(self, direction, order=1):
+    def partial_differentiated(self, direction, order=1, accuracy_order=2):
         """Return a :py:class:`~.HierarchicalGridData` that is the numerical
         order-differentiation of the present grid_data along a given direction.
         (order = number of derivatives, ie ``order=2`` is second derivative)
@@ -2886,16 +3250,21 @@ class HierarchicalGridData(BaseNumerical):
         :type order: int
         :param direction: Direction of the partial derivative.
         :type direction: int
+        :param accuracy_order: Order of accuracy of the finite difference scheme.
+        :type accuracy_order: int
 
         :returns:  New :py:class:`~.HierarchicalGridData` with derivative.
         :rtype:    :py:class:`~.HierarchicalGridData`
 
         """
         return self._call_component_method(
-            "partial_differentiated", direction, order=order
+            "partial_differentiated",
+            direction,
+            order=order,
+            accuracy_order=accuracy_order,
         )
 
-    def gradient(self, order=1):
+    def gradient(self, order=1, accuracy_order=2):
         """Return a list :py:class:`~.HierarchicalGridData` that are the numerical
         order-differentiation of the present grid_data along all the directions.
         (order = number of derivatives, ie ``order=2`` is second derivative)
@@ -2908,16 +3277,21 @@ class HierarchicalGridData(BaseNumerical):
 
         :param order: Order of derivative (e.g. 2 = second derivative).
         :type order: int
+        :param accuracy_order: Order of accuracy of the finite difference scheme.
+        :type accuracy_order: int
         :returns: list of :py:class:`~.HierarchicalGridData` with partial
                   derivative along all the directions.
         :rtype:  list of :py:class:`~.HierarchicalGridData`
 
         """
         return self._call_component_method(
-            "gradient", method_returns_list=True, order=order
+            "gradient",
+            method_returns_list=True,
+            order=order,
+            accuracy_order=accuracy_order,
         )
 
-    def partial_differentiate(self, direction, order=1):
+    def partial_differentiate(self, direction, order=1, accuracy_order=2):
         """Apply a numerical differentiatin along the specified direction.
 
         The derivative is calulated as centered differencing in the interior
@@ -2930,13 +3304,18 @@ class HierarchicalGridData(BaseNumerical):
         :type order: int
         :param direction: Direction of the partial derivative.
         :type direction: int
+        :param accuracy_order: Order of accuracy of the finite difference scheme.
+        :type accuracy_order: int
 
         :returns: Derivative along the specified direction.
         :rtype: list of :py:class:`~.HierarchicalGridData`
 
         """
         return self._apply_to_self(
-            self.partial_differentiated, direction, order=order
+            self.partial_differentiated,
+            direction,
+            order=order,
+            accuracy_order=accuracy_order,
         )
 
     def ghost_zones_removed(self):

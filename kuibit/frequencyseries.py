@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-# Copyright (C) 2020-2022 Gabriele Bozzola
+# Copyright (C) 2020-2023 Gabriele Bozzola
 #
 # Inspired by code originally developed by Wolfgang Kastaun. This file may
 # contain algorithms and/or structures first implemented in
@@ -108,6 +108,7 @@ class FrequencySeries(BaseSeries):
 
     """
 
+    # skiqc PYL-W0235
     def __init__(self, f, fft, guarantee_f_is_monotonic=False):
         """Create a :py:class:`~.FrequencySeries` providing frequencies and the value at
         those frequencies.
@@ -396,7 +397,6 @@ class FrequencySeries(BaseSeries):
         # is the actual inverse of taking the dft.
         #
         if self.fmin < 0:
-
             # TimeSeries.to_FrequencySeries() rearranges the frequency so that
             # negative are on the left and positive on the right. Here, we undo
             # that.

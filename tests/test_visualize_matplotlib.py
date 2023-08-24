@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-# Copyright (C) 2020-2022 Gabriele Bozzola
+# Copyright (C) 2020-2023 Gabriele Bozzola
 #
 # This program is free software; you can redistribute it and/or modify it under
 # the terms of the GNU General Public License as published by the Free Software
@@ -16,6 +16,7 @@
 # this program; if not, see <https://www.gnu.org/licenses/>.
 
 import os
+import tempfile
 import unittest
 
 # We use the agg backend because it should work everywhere
@@ -46,8 +47,16 @@ class TestVisualizeMatplotlib(unittest.TestCase):
         viz.setup_matplotlib({"font.size": 18})
         self.assertEqual(matplotlib.rcParams["font.size"], 18)
 
-    def test_preprocess_plot_functions(self):
+        # Test with rc file
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = os.path.join(tmpdir, "matplotlib.rc")
+            with open(path, "w") as tmpfile:
+                tmpfile.write("image.cmap: viridis")
 
+            viz.setup_matplotlib(rc_par_file=path)
+        self.assertEqual(matplotlib.rcParams["image.cmap"], "viridis")
+
+    def test_preprocess_plot_functions(self):
         # We test preprocess_plot with a function that returns the argument, so
         # we can check that they are what we expect
         def func(data, **kwargs):
@@ -110,18 +119,14 @@ class TestVisualizeMatplotlib(unittest.TestCase):
         # Valid (passing x0 and x1)
         ret2 = dec_func_grid(data=hg, shape=ugd.shape, x0=ugd.x0, x1=ugd.x1)
         # Check coordinates (which checks the resampling)
-        self.assertTrue(
-            np.allclose(
-                ret2[1]["coordinates"][0], ugd.coordinates_from_grid()[0]
-            )
+        np.testing.assert_allclose(
+            ret2[1]["coordinates"][0], ugd.coordinates_from_grid()[0]
         )
 
         # Not passing x0 and x1
         ret2b = dec_func_grid(data=hg, shape=ugd.shape)
-        self.assertTrue(
-            np.allclose(
-                ret2b[1]["coordinates"][0], ugd.coordinates_from_grid()[0]
-            )
+        np.testing.assert_allclose(
+            ret2b[1]["coordinates"][0], ugd.coordinates_from_grid()[0]
         )
 
         # We create an empty OneGridFunctionASCII and populate it with ugd
@@ -138,11 +143,10 @@ class TestVisualizeMatplotlib(unittest.TestCase):
         ret3 = dec_func_grid(
             data=cactus_ascii, iteration=0, shape=ugd.shape, xlabel="x"
         )
-        self.assertTrue(
-            np.allclose(
-                ret3[1]["coordinates"][0], ugd.coordinates_from_grid()[0]
-            )
+        np.testing.assert_allclose(
+            ret3[1]["coordinates"][0], ugd.coordinates_from_grid()[0]
         )
+
         # Test xlabel and ylabel
         self.assertEqual(ret3[1]["xlabel"], "x")
 
@@ -168,7 +172,6 @@ class TestVisualizeMatplotlib(unittest.TestCase):
             dec_func_grid(data=ugd_m, shape=[10, 10], x0=[1, 3])
 
     def test_vmin_vmax_extend(self):
-
         data = np.array([1, 2])
 
         # Test vmin, vmax None
@@ -200,7 +203,6 @@ class TestVisualizeMatplotlib(unittest.TestCase):
         )
 
     def test_plot_grid(self):
-
         ugd = gdu.sample_function(
             lambda x, y: x + y, [100, 20], [0, 1], [2, 5]
         )
@@ -256,7 +258,6 @@ class TestVisualizeMatplotlib(unittest.TestCase):
         )
 
     def test_plot_colorbar(self):
-
         ugd = gdu.sample_function(
             lambda x, y: x + y, [100, 20], [0, 1], [2, 5]
         )
@@ -271,7 +272,6 @@ class TestVisualizeMatplotlib(unittest.TestCase):
         )
 
     def test_plot_horizon_shape(self):
-
         ah = SimDir("tests/horizons").horizons[0, 1]
 
         shape = ah.shape_outline_at_iteration(0, (None, None, 0))
@@ -289,18 +289,14 @@ class TestVisualizeMatplotlib(unittest.TestCase):
         with self.assertRaises(ValueError):
             viz.plot_horizon_on_plane_at_time(ah, 0, "bob")
 
-        self.assertTrue(
-            np.allclose(
-                viz.plot_horizon(shape)[0].xy,
-                viz.plot_horizon_on_plane_at_iteration(ah, 0, "xy")[0].xy,
-            )
+        np.testing.assert_allclose(
+            viz.plot_horizon(shape)[0].xy,
+            viz.plot_horizon_on_plane_at_iteration(ah, 0, "xy")[0].xy,
         )
 
-        self.assertTrue(
-            np.allclose(
-                viz.plot_horizon(shape)[0].xy,
-                viz.plot_horizon_on_plane_at_time(ah, 0, "xy")[0].xy,
-            )
+        np.testing.assert_allclose(
+            viz.plot_horizon(shape)[0].xy,
+            viz.plot_horizon_on_plane_at_time(ah, 0, "xy")[0].xy,
         )
 
         with self.assertRaises(RuntimeError):
@@ -322,7 +318,6 @@ class TestVisualizeMatplotlib(unittest.TestCase):
             viz.plot_horizon_on_plane_at_time(ah, 0, "xy")
 
     def test_plot_components_boundaries(self):
-
         # Test invalid data
         with self.assertRaises(TypeError):
             viz.plot_components_boundaries("bob")
@@ -342,7 +337,6 @@ class TestVisualizeMatplotlib(unittest.TestCase):
         viz.plot_components_boundaries(hg)
 
     def test_add_text_to_corner(self):
-
         with self.assertRaises(ValueError):
             viz._process_anchor_info("BW", 0.02)
 
@@ -374,6 +368,8 @@ class TestVisualizeMatplotlib(unittest.TestCase):
         # Test with a 3D plot
         from mpl_toolkits.mplot3d import Axes3D  # noqa: F401, E402
 
+        # Clear everything before creating new axis, needed for matplotlib > 3.8
+        plt.clf()
         ax = plt.subplot(projection="3d")
         self.assertTrue(
             isinstance(
@@ -383,7 +379,6 @@ class TestVisualizeMatplotlib(unittest.TestCase):
         )
 
     def test_save(self):
-
         x = np.linspace(0, 1, 100)
         y = np.sin(x)
 
@@ -418,7 +413,6 @@ class TestVisualizeMatplotlib(unittest.TestCase):
         os.remove("test.tikz")
 
     def test_save_from_dir_name_ext(self):
-
         plt.plot([1, 1], [2, 2])
         # Test without dot in the ext
         viz.save_from_dir_filename_ext(".", "test", "pdf")
@@ -431,7 +425,6 @@ class TestVisualizeMatplotlib(unittest.TestCase):
         os.remove("test.pdf")
 
     def test_figname(self):
-
         # Instead of testing with an argparse.Namespace, we create a tiny class
         # here with the attribute figname
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-# Copyright (C) 2020-2022 Gabriele Bozzola
+# Copyright (C) 2020-2023 Gabriele Bozzola
 #
 # This program is free software; you can redistribute it and/or modify it under
 # the terms of the GNU General Public License as published by the Free Software
@@ -70,9 +70,9 @@ def Sn_LISA(freqs, arms_length=2.5e9):
     # Transfer frequency
     f_star = C_SI / (2 * np.pi * arms_length)
 
-    # Equation (13)
+    # This is Equation (13)
     Sn = (
-        (10.0 / (3 * arms_length ** 2))
+        (10.0 / (3 * arms_length**2))
         * (
             P_OMS(freqs)
             + 2
@@ -112,11 +112,48 @@ def Sn_ET_B(freqs):
     #
     # ET distributes Amplitude Spectral Densities
     asd = load_FrequencySeries(StringIO(data))
-    psd = asd ** 2
+    psd = asd**2
 
     # Resample on the requested frequencies. ETB is well-behaved, so it is fine
     # to use splines.
     psd.resample(freqs)
+
+    return psd
+
+
+def Sn_ET_D(freqs):
+    """Return the average power spectral density noise for Einstein Telescope
+    (variant D) in 1/Hz.
+
+    .. note::
+
+        The data was downloaded from
+        https://apps.et-gw.eu/tds/?content=3&r=14065 and has range ``fmin=1``,
+        ``fmax=10000`` (Hz).
+
+    :param freqs: Frequencies in Hz over which to evaluate the sensitivity curve.
+    :type freqs: 1d NumPy array
+
+    :returns: ET-D sensitivity curve in 1/Hz.
+    :rtype: :py:class:`~.FrequencySeries`
+
+    """
+    freqs = np.asarray(freqs)
+
+    # Why is it so difficult to read files in Python packages? :(
+    data = pkgutil.get_data("kuibit", "data/ETD.dat").decode("utf8")
+    # We convert this data in a StringIO that NumPy can read, we can pass this
+    # to load_FrequencySeries, since its backend is np.loadtxt
+    #
+    # ET-D has four columns: freq, ET-D-LF, ET-D-HF, ET-D-sum. We only care
+    # about the last one
+    f, _, _, fft = np.loadtxt(StringIO(data), unpack=True)
+    asd = FrequencySeries(f, fft)
+    psd = asd**2
+
+    # Resample on the requested frequencies. ETD has some spikes, so it is
+    # better to not use splines.
+    psd.resample(freqs, piecewise_constant=True)
 
     return psd
 
@@ -147,7 +184,7 @@ def Sn_CE1(freqs):
 
     # CE distributes Amplitude Spectral Densities
     asd = load_FrequencySeries(StringIO(data))
-    psd = asd ** 2
+    psd = asd**2
 
     # Resample on the requested frequencies. CE1 has some spikes, so it is
     # better to not use splines.
@@ -182,7 +219,7 @@ def Sn_CE2(freqs):
 
     # CE distributes Amplitude Spectral Densities
     asd = load_FrequencySeries(StringIO(data))
-    psd = asd ** 2
+    psd = asd**2
 
     # Resample on the requested frequencies. CE1 has some spikes, so it is
     # better to not use splines.
@@ -217,7 +254,7 @@ def Sn_aLIGO(freqs):
 
     # aLIGO distributes Amplitude Spectral Densities
     asd = load_FrequencySeries(StringIO(data))
-    psd = asd ** 2
+    psd = asd**2
 
     # Resample on the requested frequencies. CE1 has some spikes, so it is
     # better to not use splines.
@@ -252,7 +289,7 @@ def Sn_voyager(freqs):
 
     # Voyager distributes Amplitude Spectral Densities
     asd = load_FrequencySeries(StringIO(data))
-    psd = asd ** 2
+    psd = asd**2
 
     # Resample on the requested frequencies. CE1 has some spikes, so it is
     # better to not use splines.
@@ -288,7 +325,7 @@ def Sn_KAGRA_D(freqs):
 
     # KAGRA distributes Amplitude Spectral Densities
     asd = load_FrequencySeries(StringIO(data))
-    psd = asd ** 2
+    psd = asd**2
 
     # Resample on the requested frequencies. CE1 has some spikes, so it is
     # better to not use splines.
@@ -323,7 +360,7 @@ def Sn_aLIGO_plus(freqs):
 
     # aLIGO distributes Amplitude Spectral Densities
     asd = load_FrequencySeries(StringIO(data))
-    psd = asd ** 2
+    psd = asd**2
 
     # Resample on the requested frequencies. CE1 has some spikes, so it is
     # better to not use splines.

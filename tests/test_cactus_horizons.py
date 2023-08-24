@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-# Copyright (C) 2020-2022 Gabriele Bozzola
+# Copyright (C) 2020-2023 Gabriele Bozzola
 #
 # This program is free software; you can redistribute it and/or modify it under
 # the terms of the GNU General Public License as published by the Free Software
@@ -17,6 +17,7 @@
 
 
 import os
+import re
 import unittest
 
 import numpy as np
@@ -44,7 +45,6 @@ class TestHorizonsDir(unittest.TestCase):
         self.qlm_shape = ch.HorizonsDir(self.sim_shape)
 
     def test_init(self):
-
         # Testing the init tests also the _populate functions
 
         # Now let's test that self.hor has all the correct variables
@@ -143,7 +143,6 @@ class TestHorizonsDir(unittest.TestCase):
         self.assertCountEqual(self.qlm_shape._shape_files, dict_shape)
 
     def test_properties(self):
-
         self.assertCountEqual(self.hor.available_qlm_horizons, [0, 1, 2])
         self.assertCountEqual(self.ahs.available_qlm_horizons, [])
         self.assertCountEqual(self.qlm_shape.available_qlm_horizons, [0, 1, 2])
@@ -155,7 +154,6 @@ class TestHorizonsDir(unittest.TestCase):
         )
 
     def test__str(self):
-
         self.assertEqual(
             str(sd.SimDir("tests/tov").horizons), "No horizon found"
         )
@@ -167,7 +165,6 @@ class TestHorizonsDir(unittest.TestCase):
         self.assertEqual(str(self.hor), expected_str)
 
     def test__getitem__(self):
-
         # Incorrect key
         with self.assertRaises(TypeError):
             self.hor["hey"]
@@ -208,7 +205,6 @@ class TestHorizonsDir(unittest.TestCase):
             )
 
     def test_get_apparent_horizon(self):
-
         # Horizon not available
         with self.assertRaises(KeyError):
             self.hor.get_apparent_horizon(6)
@@ -223,7 +219,6 @@ class TestHorizonsDir(unittest.TestCase):
         )
 
     def test_get_qlm_horizon(self):
-
         # Horizon not available
         with self.assertRaises(KeyError):
             self.hor.get_qlm_horizon(6)
@@ -261,7 +256,6 @@ class TestOneHorizon(unittest.TestCase):
             self.sh = self.qlm_shape[(0, 1)]
 
     def test_init(self):
-
         # Check that attributes for qlm vars are set (or not)
         self.assertTrue(hasattr(self.ho, "mass"))
         self.assertFalse(hasattr(self.ah, "mass"))
@@ -276,6 +270,10 @@ class TestOneHorizon(unittest.TestCase):
         self.assertTrue(hasattr(self.ho.ah, "area"))
         self.assertTrue(hasattr(self.ah.ah, "area"))
         self.assertFalse(hasattr(self.sh.ah, "area"))
+
+        # Test qlm/ah_available
+        self.assertTrue(self.ho.ah_available)
+        self.assertTrue(self.ho.qlm_available)
 
         # Test formation time
         self.assertEqual(self.ho.formation_time, 0)
@@ -299,7 +297,6 @@ class TestOneHorizon(unittest.TestCase):
         self.assertIs(self.sh.shape_time_max, None)
 
     def test__getitem(self):
-
         # Test key not available
         with self.assertRaises(KeyError):
             self.ho["hey"]
@@ -307,13 +304,11 @@ class TestOneHorizon(unittest.TestCase):
         self.assertEqual(self.ho["mass"], self.ho._qlm_vars["mass"])
 
     def test_ah_property(self):
-
         self.assertEqual(
             self.ho.get_ah_property("area"), self.ho._ah_vars["area"]
         )
 
     def test__str(self):
-
         # Test various components
         self.assertIn("Formation time", str(self.ho))
         self.assertIn("Formation time", str(self.ah))
@@ -328,7 +323,6 @@ class TestOneHorizon(unittest.TestCase):
         self.assertIn("Final Mass", str(self.sh))
 
     def test_shape(self):
-
         # Test shape information not available
         with self.assertRaises(ValueError):
             self.ah._patches_at_iteration(0)
@@ -359,12 +353,11 @@ class TestOneHorizon(unittest.TestCase):
         for patch in patches:
             expected_x.append(patches[patch][0])
 
-        self.assertTrue(
-            np.allclose(expected_x, self.ho.shape_at_iteration(0)[0])
+        np.testing.assert_allclose(
+            expected_x, self.ho.shape_at_iteration(0)[0]
         )
 
     def test_shape_time_at_iteration(self):
-
         # Test iteration not available
         with self.assertRaises(ValueError):
             self.ho.shape_time_at_iteration(10465)
@@ -372,21 +365,17 @@ class TestOneHorizon(unittest.TestCase):
         self.assertAlmostEqual(self.ho.shape_time_at_iteration(1024), 6.400)
 
     def test_shape_at_time(self):
-
         # Test time not available
         with self.assertRaises(ValueError):
             self.ho.shape_at_time(10465)
 
         # Test time available
-        self.assertTrue(
-            np.allclose(
-                self.ho.shape_at_time(6.4, 1e-2),
-                self.ho.shape_at_iteration(1024),
-            )
+        np.testing.assert_allclose(
+            self.ho.shape_at_time(6.4, 1e-2),
+            self.ho.shape_at_iteration(1024),
         )
 
     def test_shape_outline_at_iteration(self):
-
         # Iteration not present
         with self.assertRaises(ValueError):
             self.ho.shape_outline_at_iteration(10465, [0, 2, 3])
@@ -400,23 +389,19 @@ class TestOneHorizon(unittest.TestCase):
             self.ho.shape_outline_at_iteration(0, [0, 1])
 
         # Three Nones
-        self.assertTrue(
-            np.allclose(
-                self.ho.shape_outline_at_iteration(0, [None, None, None]),
-                self.ho.shape_at_iteration(0),
-            ),
-        )
+        np.testing.assert_allclose(
+            self.ho.shape_outline_at_iteration(0, [None, None, None]),
+            self.ho.shape_at_iteration(0),
+        ),
 
         # Three non-Nones
         with self.assertRaises(ValueError):
             self.ho.shape_outline_at_iteration(0, [1, 2, 3])
 
         # 1D cut
-        self.assertTrue(
-            np.allclose(
-                self.ho.shape_outline_at_iteration(0, [None, 0, 0]),
-                [np.array([5.61956723]), np.array([5.08838347])],
-            )
+        np.testing.assert_allclose(
+            self.ho.shape_outline_at_iteration(0, [None, 0, 0]),
+            [np.array([5.61956723]), np.array([5.08838347])],
         )
 
         # 2D cut with no points
@@ -431,25 +416,78 @@ class TestOneHorizon(unittest.TestCase):
         )
 
     def test_shape_outline_at_time(self):
-
         # Test time not available
         with self.assertRaises(ValueError):
             self.ho.shape_outline_at_time(10465, [None, None, 0])
 
         # Test time available
-        self.assertTrue(
-            np.allclose(
-                self.ho.shape_outline_at_time(6.4, [None, None, 0], 1e-2),
-                self.ho.shape_outline_at_iteration(1024, [None, None, 0]),
-            )
+        np.testing.assert_allclose(
+            self.ho.shape_outline_at_time(6.4, [None, None, 0], 1e-2),
+            self.ho.shape_outline_at_iteration(1024, [None, None, 0]),
         )
 
     def test_compute_horizons_separation(self):
         ho1 = self.hor[(0, 1)]
         ho2 = self.hor[(0, 2)]
 
-        separation = ch.compute_horizons_separation(ho1, ho2)
+        # Deprecated
+        with self.assertWarns(FutureWarning):
+            separation = ch.compute_horizons_separation(ho1, ho2)
 
         self.assertEqual(len(separation), 552)
         # They are the same file, so the separation should be 0 everywhere
         self.assertAlmostEqual(separation.max(), 0)
+
+    def test_vtk_available(self):
+        self.assertTrue(self.hor.get_qlm_horizon(1).vtk_available)
+        self.assertFalse(self.hor.get_apparent_horizon(1).vtk_available)
+
+        self.assertCountEqual(
+            self.hor.get_qlm_horizon(1).vtk_available_iterations, [0, 208896]
+        )
+
+    def test_vtk_variables(self):
+        ho = self.hor.get_qlm_horizon(1)
+
+        # Iteration not existing
+        with self.assertRaises(KeyError):
+            ho._load_vtk_at_iteration(1)
+
+        # We parse the vtk file here
+        path = ho._vtk_files[0]
+
+        with open(path) as file_:
+            lines = file_.readlines()
+
+        # Find all the variables in the VTK file by matching the header of the
+        # section
+        rx_scalars = re.compile(r"^SCALARS\s(\w+)\sfloat\s1\n$")
+
+        # We add these manually
+        variables = ["coordinates", "connectivity"]
+
+        for line in lines:
+            match_ = rx_scalars.match(line)
+            if match_:
+                variables.append(match_.groups()[0])
+
+        self.assertCountEqual(
+            ho.available_vtk_variables_at_iteration(0), variables
+        )
+
+        # Let's check the coordiantes. We hard-code the indeces for the given
+        # VTK file
+        coordinates = np.loadtxt(lines[5:2817])
+
+        np.testing.assert_array_equal(
+            ho.vtk_variable_at_iteration("coordinates", 0),
+            coordinates,
+        )
+
+        # Now the connectivity. We hard-code the indeces for the given VTK file
+        connectivity = np.loadtxt(lines[2819:5555])
+
+        np.testing.assert_array_equal(
+            ho.vtk_variable_at_iteration("connectivity", 0),
+            connectivity,
+        )

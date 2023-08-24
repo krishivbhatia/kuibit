@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-# Copyright (C) 2020-2022 Gabriele Bozzola
+# Copyright (C) 2020-2023 Gabriele Bozzola
 #
 # This program is free software; you can redistribute it and/or modify it under
 # the terms of the GNU General Public License as published by the Free Software
@@ -21,11 +21,12 @@ import numpy as np
 
 from kuibit import gw_utils as gwu
 from kuibit import timeseries as ts
+from kuibit.frequencyseries import FrequencySeries
+from kuibit.simdir import SimDir
 
 
 class TestGWUtils(unittest.TestCase):
     def test_luminosity_distance_to_redshift(self):
-
         self.assertAlmostEqual(
             gwu.luminosity_distance_to_redshift(450), 0.0948809
         )
@@ -64,7 +65,6 @@ class TestGWUtils(unittest.TestCase):
         )
 
     def test_ra_dec_to_theta_phi(self):
-
         time = "2015-09-14 09:50:45"
         angle = gwu.ra_dec_to_theta_phi(8, -70, time)
 
@@ -78,7 +78,6 @@ class TestGWUtils(unittest.TestCase):
         self.assertAlmostEqual(angle.virgo[1], -3.00853112)
 
     def test_antenna_responses(self):
-
         antenna_gw150914 = gwu.antenna_responses_from_sky_localization(
             8, -70, "2015-09-14 09:50:45"
         )
@@ -93,7 +92,6 @@ class TestGWUtils(unittest.TestCase):
         self.assertAlmostEqual(antenna_gw150914.virgo[1], 0.57442590)
 
     def test_coordinate_retarded_times(self):
-
         # Schwarzschild_radius_to_tortoise
         self.assertAlmostEqual(gwu.Schwarzschild_radius_to_tortoise(2, 0.5), 2)
 
@@ -127,7 +125,6 @@ class TestGWUtils(unittest.TestCase):
         )
 
     def test_signal_to_noise_ratio_from_strain(self):
-
         # Test strain is not timeseries
         with self.assertRaises(TypeError):
             gwu.signal_to_noise_ratio_from_strain(1)
@@ -145,3 +142,38 @@ class TestGWUtils(unittest.TestCase):
             ),
             np.sqrt(h_fft.inner_product(h_fft, noises=None, fmin=1, fmax=10)),
         )
+
+    def test_effective_amplitude_spectral_density(self):
+        # Test when strain is not timeseries
+        with self.assertRaises(TypeError):
+            gwu.effective_amplitude_spectral_density(1)
+
+        sd = SimDir("tests/gwsample")
+        det = sd.gws[91.46]
+        strain = det.get_strain_lm(2, 2, 120)
+        computed_heff = gwu.effective_amplitude_spectral_density(
+            strain, 0.1, window_function="tukey"
+        )
+
+        strain_windowed = strain.tukey_windowed(0.1)
+
+        strain_plus, strain_cross = (
+            strain_windowed.real(),
+            -strain_windowed.imag(),
+        )
+        strain_plus_fft, strain_cross_fft = (
+            strain_plus.to_FrequencySeries(),
+            strain_cross.to_FrequencySeries(),
+        )
+
+        freqs = strain_plus_fft.f
+        vals = (
+            strain_plus_fft.f
+            * (0.5 * (strain_plus_fft.amp**2 + strain_cross_fft.amp**2))
+            ** 0.5
+        )
+
+        expected_heff = FrequencySeries(freqs, vals)
+
+        np.testing.assert_allclose(expected_heff.f, computed_heff.f)
+        np.testing.assert_allclose(expected_heff.fft, computed_heff.fft)

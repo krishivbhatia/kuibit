@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-# Copyright (C) 2020-2022 Gabriele Bozzola
+# Copyright (C) 2020-2023 Gabriele Bozzola
 #
 # Based on code originally developed by Wolfgang Kastaun. This file may contain
 # algorithms and/or structures first implemented in
@@ -43,6 +43,7 @@ up with a series of brackets or dots to access the actual data. For example, if
 
 import os
 import re
+from typing import Optional
 
 import h5py
 import numpy as np
@@ -154,6 +155,28 @@ class MultipoleOneDet:
         """
         return type(self)(self.dist, self.data, self.l_min)
 
+    def crop(self, init: Optional[float] = None, end: Optional[float] = None):
+        """Remove all the data before ``init`` and after ``end``.
+
+        If ``init`` or ``end`` are not specified, do not crop on that side.
+        """
+        for _, _, ts in self.data:
+            ts.crop(init=init, end=end)
+
+    def cropped(
+        self, init: Optional[float] = None, end: Optional[float] = None
+    ):
+        """Return a copy where the data is cropped in the provided interval.
+
+        If ``init`` or ``end`` are not specified, do not crop on that side.
+
+        :returns: Copy of ``self`` with data cropped.
+        :rtype: :py:class:`~.MultipoleOneDet`
+        """
+        ret = self.copy()
+        ret.crop(init=init, end=end)
+        return ret
+
     def __contains__(self, key):
         return key in self._multipoles
 
@@ -169,6 +192,13 @@ class MultipoleOneDet:
         return (
             self.dist == other.dist and self._multipoles == other._multipoles
         )
+
+    # From Python's docs: In order to conform to the object model, classes that
+    # define their own equality method should also define their own hash method,
+    # or be unhashable.
+
+    # Since we consider series unhashable, this object also has to be unhashable.
+    __hash__ = None
 
     def __iter__(self):
         for (mult_l, mult_m), ts in sorted(self._multipoles.items()):
@@ -377,6 +407,13 @@ class MultipoleAllDets:
             return False
         return self.radii == other.radii and self._dets == other._dets
 
+    # From Python's docs: In order to conform to the object model, classes that
+    # define their own equality method should also define their own hash method,
+    # or be unhashable.
+
+    # Since we consider series unhashable, this object also has to be unhashable.
+    __hash__ = None
+
     def __len__(self):
         return len(self._dets)
 
@@ -528,20 +565,24 @@ class MultipolesDir:
         # This regex matches : l(number)_m(-number)_r(number)
         fieldname_pattern = re.compile(r"l(\d+)_m([-]?\d+)_r([0-9.]+)")
 
-        with h5py.File(path, "r") as data:
-
-            # Loop over the groups in the hdf5
-            for entry in data.keys():
-                matched = fieldname_pattern.match(entry)
-                if matched:
-                    mult_l = int(matched.group(1))
-                    mult_m = int(matched.group(2))
-                    radius = float(matched.group(3))
-                    # Read the actual data
-                    a = data[entry][()].T
-                    complex_mp = a[1] + 1j * a[2]
-                    ts = timeseries.remove_duplicated_iters(a[0], complex_mp)
-                    alldets.append((mult_l, mult_m, radius, ts))
+        try:
+            with h5py.File(path, "r") as data:
+                # Loop over the groups in the hdf5
+                for entry in data.keys():
+                    matched = fieldname_pattern.match(entry)
+                    if matched:
+                        mult_l = int(matched.group(1))
+                        mult_m = int(matched.group(2))
+                        radius = float(matched.group(3))
+                        # Read the actual data
+                        a = data[entry][()].T
+                        complex_mp = a[1] + 1j * a[2]
+                        ts = timeseries.remove_duplicated_iters(
+                            a[0], complex_mp
+                        )
+                        alldets.append((mult_l, mult_m, radius, ts))
+        except RuntimeError as exce:
+            raise RuntimeError(f"File {data} cannot be processed") from exce
 
         return alldets
 

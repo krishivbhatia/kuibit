@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-# Copyright (C) 2020-2022 Gabriele Bozzola
+# Copyright (C) 2020-2023 Gabriele Bozzola
 #
 # Inspired by code originally developed by Wolfgang Kastaun. This file may
 # contain algorithms and/or structures first implemented in
@@ -233,26 +233,18 @@ class UniformGrid:
         is not useful for caching small computations. Having an hash function
         solidifies the idea that this class is immutable.
         """
-        # We convert all the arrays in tuples (because they are hashable)
-        hash_shape = hash(tuple(self.shape))
-        hash_x0 = hash(tuple(self.x0))
-        hash_dx = hash(tuple(self.dx))
-        hash_num_ghost = hash(tuple(self.num_ghost))
-        hash_ref_level = hash(self.ref_level)
-        hash_component = hash(self.component)
-        hash_time = hash(self.time)
-        hash_iteration = hash(self.iteration)
-
-        # ^ = bitwise xor
-        return (
-            hash_shape
-            ^ hash_x0
-            ^ hash_dx
-            ^ hash_num_ghost
-            ^ hash_ref_level
-            ^ hash_component
-            ^ hash_time
-            ^ hash_iteration
+        # We combine information by taking the hash of the tuple, where we
+        # convert all the arrays in tuples (because they are hashable)
+        return hash(
+            (
+                tuple(self.shape),
+                tuple(self.x0),
+                tuple(self.dx),
+                self.ref_level,
+                self.component,
+                self.time,
+                self.iteration,
+            )
         )
 
     @property
@@ -491,7 +483,7 @@ class UniformGrid:
         # is the main method to find which grid contains a given point. (method
         # finest_component_at_point). So, it is better to have a less pythonic
         # method that fails as soon as possible.
-        for dim in range(self.num_dimensions):
+        for dim in range(self.num_dimensions):  # skipcq: PY-W0075
             if not (
                 self.lowest_vertex[dim]
                 <= point[dim]

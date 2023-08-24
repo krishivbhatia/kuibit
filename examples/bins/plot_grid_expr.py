@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # PYTHON_ARGCOMPLETE_OK
 
-# Copyright (C) 2021-2022 Gabriele Bozzola
+# Copyright (C) 2021-2023 Gabriele Bozzola
 #
 # This program is free software; you can redistribute it and/or modify it under
 # the terms of the GNU General Public License as published by the Free Software
@@ -39,12 +39,10 @@ from kuibit.visualize_matplotlib import (
 #       well.
 
 if __name__ == "__main__":
-    setup_matplotlib()
-
     desc = f"""\
 {kah.get_program_name()} plot a given expression involving grid functions.
 Use the name of the grid functions, and algebraic expressions. For example,
-sin(rho_b) * log(P, 10) (log(x, b) is log with base b).
+sin(rho_b) * log10(P).
 
 By default, no interpolation is performed so the image may look pixelated.
 There are two available modes of interpolation. The first is activated
@@ -104,6 +102,7 @@ This is much faster but it is not as accurate."""
         type=float,
     )
     args = kah.get_args(parser)
+    setup_matplotlib(rc_par_file=args.mpl_rc_file)
 
     # Parse arguments
 
@@ -128,16 +127,15 @@ This is much faster but it is not as accurate."""
         ignore_symlinks=args.ignore_symlinks,
         pickle_file=args.pickle_file,
     ) as sim:
-
         logger.debug("Prepared SimDir")
         reader = sim.gridfunctions[args.plane]
         logger.debug(f"Variables available {reader}")
 
-        parser = math_parser()
+        exp_parser = math_parser()
 
         # We need to make sure that the correct methods are being used. That is,
         # not the ones in python.math.
-        parser.ops1.update(
+        exp_parser.ops1.update(
             {
                 "exp": km.exp,
                 "sin": km.sin,
@@ -153,7 +151,7 @@ This is much faster but it is not as accurate."""
             }
         )
 
-        variable_names = parser.parse(expr).variables()
+        variable_names = exp_parser.parse(expr).variables()
 
         # vars_ is a dict that contains NumPy arrays for all the various
         # variables involved. We use NumPy arrays because py_expression_eval
@@ -176,7 +174,7 @@ This is much faster but it is not as accurate."""
             f"Plotting on grid with x0 = {x0}, x1 = {x1}, shape = {shape}"
         )
 
-        data = parser.parse(expr).evaluate(variables)
+        data = exp_parser.parse(expr).evaluate(variables)
 
         logger.debug("Resampling and plotting")
         plot_color(
@@ -194,7 +192,7 @@ This is much faster but it is not as accurate."""
             interpolation=args.interpolation_method,
         )
 
-        add_text_to_corner(fr"$t = {time:.3f}$")
+        add_text_to_corner(rf"$t = {time:.3f}$")
 
         if args.ah_show:
             for ah in sim.horizons.available_apparent_horizons:

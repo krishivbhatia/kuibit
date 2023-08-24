@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-# Copyright (C) 2020-2022 Gabriele Bozzola
+# Copyright (C) 2020-2023 Gabriele Bozzola
 #
 # This program is free software; you can redistribute it and/or modify it under
 # the terms of the GNU General Public License as published by the Free Software
@@ -22,7 +22,7 @@ from kuibit import __bibtex__, __version__
 
 class Testkuibit(unittest.TestCase):
     def test_version(self):
-        self.assertEqual(__version__, "1.3.6")
+        self.assertEqual(__version__, "1.4.0")
 
     def test_bibtex(self):
         self.assertIn("Bozzola", __bibtex__)

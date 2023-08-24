@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # PYTHON_ARGCOMPLETE_OK
 
-# Copyright (C) 2020-2022 Gabriele Bozzola
+# Copyright (C) 2020-2023 Gabriele Bozzola
 #
 # This program is free software; you can redistribute it and/or modify it under
 # the terms of the GNU General Public License as published by the Free Software
@@ -31,8 +31,6 @@ from kuibit.visualize_matplotlib import (
 )
 
 if __name__ == "__main__":
-    setup_matplotlib()
-
     desc = f"""\
 {kah.get_program_name()} plots the multipolar decomposition of one of the Phi
 Newman-Penrose constants for Maxwell/Proca as measured by a given detector and
@@ -65,6 +63,7 @@ at a given l and m."""
     )
 
     args = kah.get_args(parser)
+    setup_matplotlib(rc_par_file=args.mpl_rc_file)
 
     # Parse arguments
 
@@ -88,7 +87,6 @@ at a given l and m."""
         ignore_symlinks=args.ignore_symlinks,
         pickle_file=args.pickle_file,
     ) as sim:
-
         logger.debug("Prepared SimDir")
 
         reader_mult = sim.multipoles
@@ -114,22 +112,22 @@ at a given l and m."""
 
         plt.plot(
             phi.real(),
-            label=fr"$\Re \Phi_{phi_num}^{{{args.mult_l}{args.mult_m}}}$",
+            label=rf"$\Re \Phi_{phi_num}^{{{args.mult_l}{args.mult_m}}}$",
         )
         plt.plot(
             phi.imag(),
-            label=fr"$\Im \Phi_{phi_num}^{{{args.mult_l}{args.mult_m}}}$",
+            label=rf"$\Im \Phi_{phi_num}^{{{args.mult_l}{args.mult_m}}}$",
         )
 
         plt.legend()
         plt.xlabel("Time")
-        plt.ylabel(fr"$r \Phi_{phi_num}$")
+        plt.ylabel(rf"$r \Phi_{phi_num}$")
         set_axis_limits_from_args(args)
 
         add_text_to_corner(
             f"Det {args.detector_num}", anchor="SW", offset=0.005
         )
-        add_text_to_corner(fr"$r = {radius:.3f}$", anchor="NE", offset=0.005)
+        add_text_to_corner(rf"$r = {radius:.3f}$", anchor="NE", offset=0.005)
 
         logger.debug("Plotted")
 

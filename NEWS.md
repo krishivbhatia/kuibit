@@ -1,5 +1,110 @@
 # Changelog
 
+## Version 1.4.0 (2 May 2023)
+
+#### General
+- Minimum version of Python required is now 3.7. `kuibit` now explicitly follows
+  [NEP29](https://numpy.org/neps/nep-0029-deprecation_policy.html).
+- Started gradual typing
+- Now `SimDir` can be imported directly from `kuibit` (`from kuibit import SimDir`)
+- Update logo to high resolution (and vector graphics)
+
+#### Features
+- Added linear momentum lost by gravitational waves along the x and y directions
+  (starting from a contribution by @konrad-topolski)
+- Added `Tree` data structure
+- Added `effective_amplitude_spectral_density` within `gw_utils` (starting from
+  a contribution by @irrationalnumbers,
+  [#27](https://github.com/Sbozzolo/kuibit/pull/27))
+- Added fourth order accuracy in finite differences of grid functions
+- Added `copy` to gravitational and electromagnetic waves
+- Added `crop` and `cropped` to multipole data
+- `setup_matplotlib` now takes an optional parameter `rc_param_file` to configure
+  matplotlib using a file
+- Added computation of linear momentum lost by electromagnetic waves
+- Added `rotation180_symmetry_undo` to undo rotational symmetries in grid data
+- Added `cactus_twopunctures` to read metadata from TwoPunctures
+- Added `local_maxima` and `local_minima` to series
+- Added `mean`, `average`, `median`, `std` reductions to series and grid data
+- Added `ah_available`, `qlm_available` to `OneHorizon`
+- Added `tensor` module
+- Added support to `surface*.vtk` from `QuasiLocalMeasures`
+
+#### Support to `VTK` variables from `QuasiLocalMeasures`
+
+`QuasiLocalMeasures` has an option to output its variables on the horizon. Now,
+`kuibit` can read and parse them, so it is possible to plot horizon meshes and
+variables onto the mesh.
+
+#### New `tensor` module
+
+`kuibit.tensor` is a new module to provide high-level interfaces to work with
+tensorial objects. A `Tensor` can be built with collections of `TimeSeries`,
+`FrequencySeries`, `UniformGridData`, `HierarchicalGridData`, or any other class
+derived from `BaseNumerical`. `Tensor`s support all the mathematical operations
+and inherit the methods from their contained object. At the moment, there are
+two new subclasses of `Tensor` that implement additional features for vector
+calculus. For example, if `bh_cen` is a `Vector` with the time evolution of the
+centroid of an horizon. `bh_cen.differentiated().norm()` will be a `TimeSeries`
+with the magnitude of the coordinate velocity as a function of time (as a
+`TimeSeries`).
+
+Currently, the number of specialized methods in `Vector` and `Matrix` is not
+large. Nonetheless, the infrastructure is in place and adding new will be
+straightforward.
+
+#### New `cactus_twopunctures` module
+
+`TwoPunctures` creates a metadata file that stores important physical
+information about the initial data. The new module `cactus_twopunctures` can
+read this information and present it as a dictionary. If `sim` is a
+`SimFactory`, `sim.twopunctures` will be a dictionary-like object that has as
+keys the various quantities saved by `TwoPunctures` and as values, their values
+as read from the `TwoPunctures.bbh` file.
+
+#### New `tree` module
+
+`kuibit.tree` is a new module that can represent tree structures. At the moment,
+it is main use is to work with timer trees.
+
+#### New `hor_utils` module
+
+`kuibit.hor_utils` is a handy new module that implements common functions needed
+when working with binary black holes. At the moment, the functions implemented
+are:
+
+- `compute_separation_vector`
+- `compute_separation`
+- `compute_center_of_mass`
+- `compute_angular_velocity_vector`
+
+#### Bug fixes
+
+- Fix passing an empty `ah_vars` to `OneHorizon`.
+- Fix floating-point comparison in `grid_data`.
+- Fix optional positional arguments to `series._local_extrema`.
+- Fix algorithm to compute hash for `UniformGrid`.
+- Make classes that should not hashed unhashable.
+- `GravitationalWaves` now find multipole variables that contain `psi4` (as
+  opposed to being identically to `Psi4`)
+
+#### Detector sensitivity curves
+
+- Add more updated sensitivity curve for Einstein Telescope (ET-D) (thanks,
+  @bgiacoma, [#33](https://github.com/Sbozzolo/kuibit/issues/33)).
+
+#### New/updated examples
+
+Scripts:
+
+* `describe_simdir.py`
+* `interactive_timertree.py`
+* `print_available_iteration.py` optionally prints the corresponding time
+* `plot_charge_phi1.py`
+* `plot_binary_ah_angular_velocity.py`
+* `plot_binary_ah_period.py`
+
+
 ## Version 1.3.6 (5 July 2022)
 
 #### Bug fixes
@@ -19,7 +124,6 @@
 - Improvements to documentation and docstrings
 
 #### Bug fixes
-
 - Added error in `_plot_horizon_on_plane` when the horizon cannot be plotted
 - Updated NumPy types (np.int -> int, np.float -> float)
 - Windowing uneven signals is no longer allowed
@@ -29,6 +133,11 @@
   [#28](https://github.com/Sbozzolo/kuibit/issues/28))
 - Fix some information not being propagated by
   `grid_data_utils.merge_uniform_grids`.
+
+#### Breaking changes
+- The `merge_refinement_levels` function in `HierarchicalGridData` has been
+  renamed to `refinement_levels_merged` for consistency. (Imperative methods
+  edit the object in-place)
 
 #### New examples
 

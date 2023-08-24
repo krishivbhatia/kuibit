@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # PYTHON_ARGCOMPLETE_OK
 
-# Copyright (C) 2021-2022 Gabriele Bozzola
+# Copyright (C) 2021-2023 Gabriele Bozzola
 #
 # This program is free software; you can redistribute it and/or modify it under
 # the terms of the GNU General Public License as published by the Free Software
@@ -31,8 +31,6 @@ from kuibit.visualize_matplotlib import (
 )
 
 if __name__ == "__main__":
-    setup_matplotlib()
-
     desc = """\
 
 {kah.get_program_name()} plots the azimuthal and time average of a given grid
@@ -105,8 +103,13 @@ window of time defined by tmin and tmax."""
         help="Maximum radius at which perform the average (default: %(default)s)",
     )
     args = kah.get_args(parser)
+    setup_matplotlib(rc_par_file=args.mpl_rc_file)
 
-    tmin, tmax, var_name, = (
+    (
+        tmin,
+        tmax,
+        var_name,
+    ) = (
         args.tmin,
         args.tmax,
         args.variable,
@@ -144,6 +147,7 @@ window of time defined by tmin and tmax."""
         selected_times = selected_times[:: args.time_every]
         logger.debug(f"Selected times {selected_times}")
 
+        # The equations are
         # X = X0 + R * cos(phi)
         # Y = Y0 + R * sin(phi)
 
@@ -200,9 +204,9 @@ window of time defined by tmin and tmax."""
         plt.plot(radii, ret_values)
 
         add_text_to_corner(
-            fr"$t \in ({selected_times[0]:.3f}, {selected_times[-1]:.3f})$"
+            rf"$t \in ({selected_times[0]:.3f}, {selected_times[-1]:.3f})$"
         )
-        add_text_to_corner(fr"Center = {X0:.3f}, {Y0:.3f}", anchor="NW")
+        add_text_to_corner(rf"Center = {X0:.3f}, {Y0:.3f}", anchor="NW")
 
         plt.xlabel("Radius")
         plt.ylabel(label)

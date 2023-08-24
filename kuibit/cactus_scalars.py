@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-# Copyright (C) 2020-2022 Gabriele Bozzola
+# Copyright (C) 2020-2023 Gabriele Bozzola
 #
 # Based on code originally developed by Wolfgang Kastaun. This file may contain
 # algorithms and/or structures first implemented in
@@ -81,7 +81,7 @@ class OneScalar:
     # we have seven capturing groups.
     # 1: (\w+) matches any number of characters greater than 0 (w = word)
     # 2: ((-(\w+))|(\[\d+\]))? optionally match one of the two
-    # 3: Matched - with followed by 4: any word
+    # 3: Matches - with followed by 4: any word
     # 5: Matches brackets with a number inside
     # In between match a dot (\.)
     # 6: (minimum|maximum|norm1|norm2|norm_inf|average|scalars)? optionally match one
@@ -438,7 +438,8 @@ class ScalarsDir:
         return default
 
     def __str__(self):
-        return "Folder %s\n%s\n%s\n%s\n%s\n%s\n%s\n" % (
+        str_ = [f"Folder {self.path}"]
+        for key in (
             self.path,
             self.scalar,
             self.minimum,
@@ -446,4 +447,6 @@ class ScalarsDir:
             self.norm1,
             self.norm2,
             self.average,
-        )
+        ):
+            str_.append(str(key))
+        return "\n".join(str_)

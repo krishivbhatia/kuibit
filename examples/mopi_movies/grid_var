@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-# Copyright (C) 2020-2022 Gabriele Bozzola
+# Copyright (C) 2020-2023 Gabriele Bozzola
 #
 # This program is free software; you can redistribute it and/or modify it under
 # the terms of the GNU General Public License as published by the Free Software
@@ -130,7 +130,7 @@ class MOPIMovie:
         # Here we plot a frame. This function has to take the output path and
         # the identifier of what is a frame (in this case, an iteration).
 
-        setup_matplotlib()
+        setup_matplotlib(self.args.mpl_rc_file)
         clear_figure()
 
         if self.args.absolute:
@@ -175,7 +175,7 @@ class MOPIMovie:
                     )
 
         time = self.var.time_at_iteration(iteration)
-        add_text_to_corner(fr"$t = {time:.3f}$")
+        add_text_to_corner(rf"$t = {time:.3f}$")
 
         save(path)
 
