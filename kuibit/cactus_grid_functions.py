@@ -1405,7 +1405,7 @@ class OneGridFunctionOpenPMD(BaseOneGridFunction):
         """
         # This will give us an overview of what is available in the provided
         # file. We keep a collection of all these in the variable self.alldata
-        rx_mesh = re.compile(r"^(\w+)_lev(\d+)$")  # r"^([a-zA-Z_0-9]+)_lev([0-9]+)$"
+        rx_mesh = re.compile(r"^(\w+)_(?:rl|lev)(\d+)$")
 
         print("path={}".format(path))
         self.series = io.Series(path, io.Access.read_only, json.dumps(config))
@@ -1422,30 +1422,29 @@ class OneGridFunctionOpenPMD(BaseOneGridFunction):
                 mesh_name = mesh[0]
                 mesh_obj = mesh[1]
                 print("Mesh = {}".format(mesh_name))
-                if mesh_name == mesh_name: 
-                    matched = rx_mesh.match(mesh_name)
-                    print("matched = {}".format(matched))
-                    self.thorn_name = matched.group(1)
-                    ref_level = matched.group(2)
-                    self.map = None
-                    # Here is where we prepare are nested alldata dictionary
-                    alldata_file = self.alldata.setdefault(path, {})
-                    alldata_iteration = alldata_file.setdefault(int(iter_no), {})
-                    alldata_ref_level = alldata_iteration.setdefault(ref_level, {})
-                    for mesh_var in mesh_obj.items():  # loop through all variables in specific mesh
-                        var_name = mesh_var[0]
-                        var_data = mesh_var[1]  # 3d array
-                        print("  {} variable found".format(var_name))
-                        mrc = mesh_obj[var_name]
-                        print("  array shape = {}".format(mrc.shape))
-                        chunks = mrc.available_chunks()
-                        chunk_no = 0
-                        for chunk in chunks:
-                            component = chunk_no
-                            # We set the actual data to None, and we will read it in
-                            # _read_component_as_uniform_grid_data upon request
-                            alldata_ref_level.setdefault(component, None)
-                            chunk_no += 1
+                matched = rx_mesh.match(mesh_name)
+                print("matched = {}".format(matched))
+                self.thorn_name = matched.group(1)
+                ref_level = matched.group(2)
+                self.map = None
+                # Here is where we prepare are nested alldata dictionary
+                alldata_file = self.alldata.setdefault(path, {})
+                alldata_iteration = alldata_file.setdefault(int(iter_no), {})
+                alldata_ref_level = alldata_iteration.setdefault(ref_level, {})
+                for mesh_var in mesh_obj.items():  # loop through all variables in specific mesh
+                    var_name = mesh_var[0]
+                    var_data = mesh_var[1]  # 3d array
+                    print("  {} variable found".format(var_name))
+                    mrc = mesh_obj[var_name]
+                    print("  array shape = {}".format(mrc.shape))
+                    chunks = mrc.available_chunks()
+                    chunk_no = 0
+                    for chunk in chunks:
+                        component = chunk_no
+                        # We set the actual data to None, and we will read it in
+                        # _read_component_as_uniform_grid_data upon request
+                        alldata_ref_level.setdefault(component, None)
+                        chunk_no += 1
 
     def _grid_from_dataset(self, dataset, iteration, ref_level, component):
         """Return a :py:class:`~.UniformGrid` from a given HDF5 dataset.
@@ -1468,7 +1467,7 @@ class OneGridFunctionOpenPMD(BaseOneGridFunction):
         # shape = np.array(dataset.shape[::-1])
         shape = np.array(dataset.shape)
         time = 0
-        rx_mesh = re.compile(r"^(\w+)_lev(\d+)$")
+        rx_mesh = re.compile(r"^(\w+)_(?:rl|lev)(\d+)$")
         # With the .get we ensure that if "cctk_nghostzones" cannot be read, we
         # have returned None, which we can test later
         # num_ghost = dataset.attrs.get("cctk_nghostzones", None)
@@ -1515,15 +1514,9 @@ class OneGridFunctionOpenPMD(BaseOneGridFunction):
                                 component=component,
                         )
 
-    # What is a context manager?
-    #
-    # Context managers are useful ways to handle resources in Python. With a
-    # context manager, we do not have to worry about releasing resources. Here,
-    # we wrap reading the h5 file with another context manager so that we can
-    # easily get the dataset.
-    # @contextmanager
+    # get the dataset by loading mrc chunks
     def _get_dataset(self, path, iteration, ref_level, component):
-        """Context manager to read an HDF5 file.
+        """Load data from chunks in OpenPMD file.
 
         :param path: Path of the file.
         :type path: str
@@ -1537,7 +1530,7 @@ class OneGridFunctionOpenPMD(BaseOneGridFunction):
         """
 
         print("path={}".format(path))
-        rx_mesh = re.compile(r"^(\w+)_lev(\d+)$")
+        rx_mesh = re.compile(r"^(\w+)_(?:rl|lev)(\d+)$")
         self.series = io.Series(path, io.Access.read_only, json.dumps(config))
         iter_open_pmd = self.series.iterations
         all_mesh = iter_open_pmd[iteration].meshes
@@ -1743,7 +1736,6 @@ class AllGridFunctions:
         # Example of filenames are:
         # admbase-metric.xyz.file_158.h5 (one group per file)
         # alp.xy.h5 (one variable per file)
-        # filename_pattern = r"^([a-zA-Z0-9_]+)(-)?([a-zA-Z0-9\[\]_]+)%s.%s$"
         filename_pattern = r"^(([a-zA-Z0-9_]+)-)?([a-zA-Z0-9\[\]_]+)%s.%s$"
         h5_pattern = filename_pattern % (
             self.filename_extensions[self.dimension],
@@ -1910,15 +1902,13 @@ class AllGridFunctions:
                             mesh_name = mesh[0]
                             mesh_obj = mesh[1]
                             print("Mesh = {}".format(mesh_name))
-                            if mesh_name == mesh_name: # "admbase_lapse_lev00":
-                                for mesh_var in mesh_obj.items():
-                                    variable_name = mesh_var[0]
-                                    print("variable_name={}".format(variable_name))
-                                    var_list = self._vars_openpmd_files.setdefault(
-                                        variable_name, set()
-                                    )
-                                    var_list.add(dir_path)
-                                    # self._vars_openpmd_files[variable_name] = dir_path
+                            for mesh_var in mesh_obj.items():
+                                variable_name = mesh_var[0]
+                                print("variable_name={}".format(variable_name))
+                                var_list = self._vars_openpmd_files.setdefault(
+                                    variable_name, set()
+                                )
+                                var_list.add(dir_path)
 
         # What pythonize_name_dict does is to make the various variables
         # accessible as attributes, e.g. self.fields.rho
